@@ -4,6 +4,11 @@
 # create-edgeforge-structure.sh
 # Recreates the EdgeForge workspace folder structure from the approved layout.
 # Idempotent: safe to re-run. Usage: ./create-edgeforge-structure.sh [ROOT]
+# execution 
+# chmod +x create-edgeforge-structure.sh
+# ./create-edgeforge-structure.sh            # creates ./edgeforge/
+# ./create-edgeforge-structure.sh my-dir     # creates ./my-dir/
+
 set -euo pipefail
 
 ROOT="${1:-edgeforge}"
