@@ -1,0 +1,358 @@
+edgeforge/
+├── Cargo.toml                          # [workspace] root manifest (18 crates)
+├── Cargo.lock                          # pinned dependencies (committed)
+├── rust-toolchain.toml                 # stable channel, msrv = 1.82
+├── deny.toml                           # cargo-deny config (licenses + bans + cycles)
+├── rustfmt.toml                        # edition 2021, imports_granularity = Crate
+├── clippy.toml                         # msrv = 1.82, warnings = deny
+├── flake.nix                           # ADR-028 hermetic builds (Nix + naersk)
+├── .gitmodules                         # llama.cpp submodule declaration
+├── README.md                           # project overview
+│
+├── crates/
+│   │
+│   ├── edgeforge-core/                 # Cross-cutting: shared types, ControlEvent, errors, config
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                  # crate root; re-exports
+│   │       ├── error.rs                # EdgeForgeError enum (thiserror)
+│   │       ├── config.rs               # strongly-typed config (figment + serde)
+│   │       ├── control_event.rs        # ADR-019 unified event bus schema
+│   │       ├── types.rs                # ModelId, ExpertId, LayerIdx, Token, etc.
+│   │       └── units.rs                # Bytes, TokPerSec, Celsius newtypes
+│   │
+│   ├── edgeforge-core-legacy/          # ADR-024 zero-dep no_std core (50-year survivability)
+│   │   ├── Cargo.toml                  # ZERO external deps in no-std mode
+│   │   └── src/
+│   │       ├── lib.rs                  # #![no_std] #![forbid(unsafe_code)]; ComputeSubstrate trait
+│   │       └── std_impls.rs            # std-mode serde + Display impls
+│   │
+│   ├── edgeforge-observability/        # ADR-012 tracing + opt-in OTLP
+│   │   ├── Cargo.toml                  # telemetry-otlp feature (off by default)
+│   │   └── src/
+│   │       ├── lib.rs                  # FORBIDDEN_ATTRIBUTE_SUBSTRINGS (R-14)
+│   │       ├── subscriber.rs           # tracing-subscriber setup; OTLP guard
+│   │       ├── otlp.rs                 # (Phase 3) OTLP exporter
+│   │       ├── metrics.rs              # (Phase 3) metrics crate facade
+│   │       └── span.rs                 # span attribute safety (R-14 mitigation)
+│   │
+│   ├── edgeforge-security/             # L1 Security
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── manifest.rs             # F-LOAD-04, F-SEC-05 signed manifest verify
+│   │       ├── hash.rs                 # SHA-256 streaming verifier
+│   │       ├── sandbox.rs              # F-SEC-03 platform sandbox policy
+│   │       ├── attestation.rs          # F-SEC-07 SGX/SEP/SEV-SNP hooks (Phase 4)
+│   │       ├── encryption.rs           # F-SEC-06 + activation-level encryption (R-20)
+│   │       └── crypto_agility.rs       # ADR-027 PQC traits (KemAlgorithm, SigAlgorithm)
+│   │
+│   ├── edgeforge-promptsec/            # L1.5 Prompt Security (ADRs 020-023)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                  # pipeline overview + threat model
+│   │       ├── privilege.rs            # ADR-020 DualLlmPipeline, PlannerLlm, WorkerLlm
+│   │       ├── spotlighting.rs         # ADR-021 data marking + encapsulation + trimming
+│   │       ├── guardrails.rs           # ADR-022 IntentGuardrails, RegexIntentClassifier
+│   │       └── quarantine.rs           # ADR-023 QuarantineReader, SanitizedSummary
+│   │
+│   ├── edgeforge-net/                  # L2 Networking (ADR-010 QUIC)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── discovery.rs            # F-NET-01 mDNS via zeroconf
+│   │       ├── quic_transport.rs       # quinn 0.11 + rustls; MeshTransport trait
+│   │       ├── mtls.rs                 # F-SEC-02 rustls cert verify over QUIC
+│   │       ├── capability.rs           # G-03 fix PeerCapability descriptor
+│   │       ├── mesh.rs                 # F-NET-03 expert-partition router
+│   │       ├── pipeline.rs             # F-NET-04 layer-stripe forwarding
+│   │       ├── bandwidth.rs            # F-NET-05 link prober
+│   │       └── recovery.rs             # F-NET-06 heartbeat, expert re-page
+│   │
+│   ├── edgeforge-crowd/                # L2.5 Crowd Coordination (ADR-017)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── coordinator.rs          # CrowdCoordinator trait + ExecutionMode
+│   │       ├── verification.rs         # VerificationPolicy, samplers, outcomes
+│   │       ├── reputation.rs           # PeerReputation + ReputationGraph (EMA)
+│   │       ├── ledger.rs               # IncentiveLedger (Tier 2 credit / Tier 3 token)
+│   │       └── churn.rs                # ChurnPolicy + churn-resilient scheduler
+│   │
+│   ├── edgeforge-storage/              # L3 Storage Tier
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── platform/
+│   │       │   ├── mod.rs              # PlatformIo trait (Verus-verified, ADR-025)
+│   │       │   ├── iouring.rs          # Linux io_uring (Phase 4)
+│   │       │   ├── iocp.rs             # Windows IOCP (Phase 4)
+│   │       │   ├── dispatch_io.rs      # macOS dispatch_io (Phase 4)
+│   │       │   └── blocking.rs         # portable fallback for tests
+│   │       ├── weight_pager.rs         # F-TIER-01, F-TIER-02, F-TIER-05
+│   │       ├── expert_cache.rs         # RAM-resident LRU expert cache
+│   │       ├── kv_pager.rs             # F-TIER-04, F-TIER-06 paged KV cache
+│   │       ├── prefetcher.rs           # F-TIER-03 + multi-horizon (ADR-015)
+│   │       ├── vram_tier.rs            # VRAM staging (CUDA / Metal / ROCm)
+│   │       ├── thermal.rs              # F-MON-04 SMART temp polling, throttle
+│   │       └── wear.rs                 # F-MON-03 SSD health metrics
+│   │
+│   ├── edgeforge-graph/                # L3.5 Streaming Graph (ADR-014)
+│   │   ├── Cargo.toml
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # StreamingGraph trait (<10 µs p99)
+│   │   │   ├── core_.rs                # GraphCore (dashmap + parking_lot)
+│   │   │   ├── ingest.rs               # bounded-channel ingest (R-18 load shedding)
+│   │   │   └── query.rs                # GraphQuery impl + H3 prediction
+│   │   └── benches/
+│   │       └── query_latency.rs        # <10 µs p99 contract validation (CI gate)
+│   │
+│   ├── edgeforge-runtime/              # L4 Inference Runtime
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                  # public Rust facade (safe API)
+│   │       ├── engine.rs               # InferenceEngine trait + ExecutionMode
+│   │       ├── llama_backend.rs        # Impl A: llama.cpp FFI (ADR-032)
+│   │       ├── ssd_engine.rs           # Impl B: custom Rust SSD engine (ADR-032)
+│   │       ├── router_hook.rs          # F-SCHED-01 GraphAwareRouterHook
+│   │       ├── speculation.rs          # ADR-015/016 H1/H2/H3 + workload detect
+│   │       ├── batching.rs             # F-SCHED-03 continuous batching
+│   │       ├── priority.rs             # F-SCHED-04 interactive vs batch
+│   │       ├── determinism.rs          # F-SCHED-05 reproducible mode
+│   │       └── profiler.rs             # F-MON-05 per-layer latency
+│   │
+│   ├── edgeforge-runtime-sys/          # -sys crate: unsafe FFI to llama.cpp
+│   │   ├── Cargo.toml                  # links = "llama"
+│   │   ├── build.rs                    # cc + cmake; builds llama.cpp (Phase 3)
+│   │   ├── wrapper.h                   # bindgen input
+│   │   └── src/
+│   │       └── lib.rs                  # raw FFI bindings (unsafe, Kani-verified)
+│   │
+│   ├── edgeforge-orchestration/        # L5 Orchestration
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── lifecycle.rs            # load → warm → serve → unload
+│   │       ├── scheduler.rs            # priority lanes, batch queue
+│   │       ├── presets.rs              # F-UX-04 + accuracy SLA enforcement (R-19)
+│   │       ├── mesh_coord.rs           # F-NET-* distributed coordinator
+│   │       ├── jobs.rs                 # F-UX-06 SQLite-backed job queue
+│   │       ├── benchmark.rs            # F-MON-01 + speculation/crowd metrics (G-06)
+│   │       ├── quality_eval.rs         # F-MON-02 MMLU-lite / HumanEval-10
+│   │       ├── event_bus.rs            # ADR-019 ControlEvent publisher
+│   │       └── db.rs                   # ORM models (sqlx::query_as!)
+│   │
+│   ├── edgeforge-autonomic/            # L5.5 MAPE-K Autonomic Loop (ADR-029)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── mape.rs                 # MapeKLoop + SPC (Welford's algorithm)
+│   │       ├── knowledge.rs            # AutonomicKnowledge + FailurePattern
+│   │       ├── remediation.rs          # Remediation actions + results
+│   │       └── test_generator.rs       # antifragile: generates regression tests
+│   │
+│   ├── edgeforge-kpi/                  # Cross-cutting: Architecture KPI Dashboard (ADR-030)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── qppo.rs                 # 8 frozen QPPOs + control limits
+│   │       ├── traceability.rs         # bidirectional traceability matrix (CI gate)
+│   │       └── carbon.rs               # ADR-026 CarbonAwareRouter + StaticCarbonTable
+│   │
+│   ├── edgeforge-api/                  # OpenAI-compatible REST (axum) + SSE
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── server.rs               # axum app builder
+│   │       ├── state.rs                # AppState (shared Models + Jobs)
+│   │       ├── dto.rs                  # request/response types (serde + utoipa)
+│   │       ├── dto/
+│   │       │   └── mod.rs              # re-exports flat DTOs
+│   │       ├── routes/
+│   │       │   ├── mod.rs
+│   │       │   ├── chat.rs             # POST /v1/chat/completions (SSE + verify header)
+│   │       │   ├── completions.rs      # POST /v1/completions
+│   │       │   ├── embeddings.rs       # POST /v1/embeddings (F-DEV-06)
+│   │       │   ├── models.rs           # GET /v1/models
+│   │       │   ├── files.rs            # POST /v1/files RAG ingest (F-DEV-06)
+│   │       │   ├── webhooks.rs         # F-DEV-05 signed callbacks
+│   │       │   └── health.rs           # GET /health
+│   │       └── middleware/
+│   │           ├── mod.rs
+│   │           ├── error.rs            # centralized error → JSON
+│   │           ├── rate_limit.rs       # token-bucket per API key
+│   │           ├── auth.rs             # API key (optional, localhost-only)
+│   │           ├── verification.rs     # ADR-018 X-EdgeForge-Verification header
+│   │           └── logging.rs          # structured request/response logging
+│   │
+│   ├── edgeforge-sdk-python/           # ADR-011 PyO3 + maturin wheel build
+│   │   ├── Cargo.toml                  # cdylib + pyo3
+│   │   ├── pyproject.toml              # maturin build backend
+│   │   └── src/
+│   │       └── lib.rs                  # PyO3 bindings → edgeforge-api client
+│   │
+│   ├── edgeforge-cli/                  # `edgeforge` binary
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── main.rs                 # clap derive
+│   │       ├── output.rs               # JSON / human-friendly output
+│   │       └── commands/
+│   │           ├── mod.rs
+│   │           ├── serve.rs            # `edgeforge serve`
+│   │           ├── run.rs              # `edgeforge run`
+│   │           ├── model.rs            # `edgeforge model list|import|verify`
+│   │           ├── bench.rs            # `edgeforge bench` (F-MON-01)
+│   │           ├── pool.rs             # `edgeforge pool join|leave|status`
+│   │           └── config_cmd.rs       # `edgeforge config show`
+│   │
+│   └── edgeforge-app/                  # Tauri 2 desktop shell (ADR-006)
+│       ├── Cargo.toml
+│       ├── tauri.conf.json             # Tauri 2 config
+│       ├── src/
+│       │   ├── main.rs                 # Tauri entry
+│       │   ├── lib.rs                  # library target
+│       │   ├── commands.rs             # Tauri IPC commands
+│       │   └── menu.rs                 # menu bar config
+│       └── ui/                         # React frontend
+│           ├── package.json            # React 18 + Zustand + React Query + D3
+│           ├── vite.config.ts          # Vite 5 + React plugin
+│           ├── tailwind.config.ts      # Tailwind 3
+│           └── src/
+│               ├── App.tsx             # root component + router
+│               ├── routes/
+│               │   ├── Chat.tsx        # F-UX-02 chat with streaming
+│               │   ├── Library.tsx     # F-UX-03 model browser
+│               │   ├── Pool.tsx        # F-UX-05 multi-tier pool dashboard
+│               │   ├── Monitor.tsx     # F-MON-03/04/05 + graph + KPI
+│               │   ├── Settings.tsx    # settings
+│               │   └── Wizard.tsx      # F-UX-01 first-run hardware wizard
+│               ├── components/
+│               │   └── index.ts
+│               ├── hooks/
+│               │   └── index.ts
+│               ├── stores/             # Zustand
+│               │   └── index.ts
+│               └── api/                # generated from OpenAPI
+│                   └── index.ts
+│
+├── ffi/
+│   └── llama.cpp/                      # git submodule @ latest stable tag (ADR-009)
+│       └── README.md                   # placeholder; init via git submodule add
+│
+├── resources/
+│   ├── migrations/                     # 16 SQLx migrations (SQLite)
+│   │   ├── 0001_init.sql               # meta table + install timestamp
+│   │   ├── 0002_models.sql             # model registry with precision CHECK
+│   │   ├── 0003_jobs.sql               # job queue with status state machine
+│   │   ├── 0004_conversations.sql      # chat history
+│   │   ├── 0005_pool_nodes.sql         # distributed pool membership
+│   │   ├── 0006_benchmarks.sql         # throughput benchmark history
+│   │   ├── 0007_embeddings.sql         # F-DEV-06 sqlite-vss
+│   │   ├── 0008_peer_reputation.sql    # v2.0 ADR-017 peer reputation
+│   │   ├── 0009_verification.sql       # v2.0 ADR-017/018 verification events
+│   │   ├── 0010_incentive.sql          # v2.0 ADR-017 incentive ledger
+│   │   ├── 0011_benchmark_extensions.sql  # v2.0 G-06 speculation/crowd metrics
+│   │   ├── 0012_prompt_audit.sql       # v3.0 ADRs 020-023 prompt-security audit
+│   │   ├── 0013_kpi_qppo.sql           # v4.0 ADR-030 KPI measurements + violations
+│   │   ├── 0014_traceability.sql       # v4.0 ADR-030 traceability matrix + ADR registry
+│   │   ├── 0015_autonomic.sql          # v4.0 ADR-029 MAPE-K events/patterns/actions
+│   │   └── 0016_crypto_inventory.sql   # v4.0 ADR-027 crypto inventory + energy/carbon
+│   ├── schemas/
+│   │   ├── manifest.v1.json            # F-LOAD-04 model manifest JSON schema
+│   │   ├── preset.v1.json              # F-UX-04 preset JSON schema
+│   │   ├── control_event.v1.json       # ADR-019 ControlEvent JSON schema
+│   │   └── openapi.yaml                # OpenAPI 3.1 spec
+│   └── manifests/
+│       └── default-publishers.json     # trusted publisher key list
+│
+├── docs/
+│   ├── adr/                            # 32 ADR documents (001–032)
+│   │   ├── 0001-rust-plus-llama-cpp-ffi.md
+│   │   ├── 0002-2tb-nvme-minimum.md
+│   │   ├── 0003-fp16-default-precision.md
+│   │   ├── 0004-precision-tier-matrix.md
+│   │   ├── 0005-sqlite-persistence.md
+│   │   ├── 0006-tauri-2-shell.md
+│   │   ├── 0007-openai-compatible-api.md
+│   │   ├── 0008-air-gapped-default.md
+│   │   ├── 0009-llama-cpp-stable-pin.md
+│   │   ├── 0010-quic-mesh-transport.md
+│   │   ├── 0011-python-prebuilt-wheels.md
+│   │   ├── 0012-opentelemetry-opt-in.md
+│   │   ├── 0013-stable-beta-release-channels.md
+│   │   ├── 0014-streaming-graph.md            # v2.0 full doc
+│   │   ├── 0015-multi-horizon-speculation.md  # v2.0
+│   │   ├── 0016-workload-aware-speculation.md # v2.0
+│   │   ├── 0017-tiered-crowd-computing.md     # v2.0 full doc
+│   │   ├── 0018-async-verification.md         # v2.0
+│   │   ├── 0019-control-event-schema.md       # v2.0
+│   │   ├── 0020-dual-llm-privilege-separation.md  # v3.0 full doc
+│   │   ├── 0021-spotlighting.md                  # v3.0 full doc
+│   │   ├── 0022-intent-guardrails.md             # v3.0 full doc
+│   │   ├── 0023-quarantine-reader-llm.md         # v3.0 full doc
+│   │   ├── 0024-legacy-first-core-design.md      # v4.0 full doc
+│   │   ├── 0025-formal-verification-gate.md      # v4.0 full doc
+│   │   ├── 0026-carbon-aware-routing.md          # v4.0 full doc
+│   │   ├── 0027-hybrid-post-quantum-mesh.md      # v4.0 full doc
+│   │   ├── 0028-hermetic-reproducible-builds.md  # v4.0 full doc
+│   │   ├── 0029-mape-k-autonomic-loop.md         # v4.0 full doc
+│   │   ├── 0030-architecture-kpi-dashboard.md    # v4.0 full doc
+│   │   ├── 0031-compute-substrate-abstraction.md # v4.0 full doc
+│   │   └── 0032-multiple-implementations.md      # v4.0 full doc
+│   ├── architecture/
+│   │   ├── 01-overview.md             # 11-layer architecture + threat model
+│   │   ├── 02-storage-tier.md         # L3 components + data flow
+│   │   ├── 03-runtime.md              # L4 InferenceEngine + ComputeSubstrate
+│   │   ├── 04-mesh.md                 # L2 + L2.5 QUIC mesh + crowd tiers
+│   │   ├── 05-streaming-graph.md      # L3.5 derived control plane
+│   │   ├── 06-crowd-tiers.md          # Tier 1/2/3 verification + honesty contract
+│   │   └── 07-prompt-security.md      # L1.5 four defenses + pipeline
+│   ├── setup/
+│   │   ├── 01-prerequisites.md        # hardware + software prerequisites
+│   │   ├── 02-build-from-source.md    # clone + build llama.cpp + cargo build
+│   │   ├── 03-first-run.md            # serve + desktop app + import model
+│   │   └── 04-troubleshooting.md      # common issues + solutions
+│   └── api/
+│       └── README.md                  # OpenAI-compatible API docs (autogenerated)
+│
+├── scripts/
+│   ├── build-llama.sh                 # builds llama.cpp for the host triple
+│   ├── gen-bindings.sh                # regenerates FFI bindings via bindgen
+│   ├── install.sh                     # one-shot installer for end users
+│   └── bootstrap-dev.sh               # dev env setup for contributors
+│
+├── tests/
+│   ├── e2e/
+│   │   ├── chat_streaming.rs          # chat SSE smoke test
+│   │   ├── model_import.rs            # model import flow
+│   │   ├── distributed_pool.rs        # Tier 1 Trusted Mesh
+│   │   ├── io_conformance.rs          # PlatformIo per-OS conformance (R-03)
+│   │   ├── graph_query_latency.rs     # <10 µs p99 contract (ADR-014)
+│   │   ├── speculation_acceptance.rs  # H1/H2/H3 hit rates (ADR-015)
+│   │   ├── crowd_verification.rs      # Tier 1/2/3 (ADR-017/018)
+│   │   ├── promptsec_injection.rs     # prompt-injection defense (ADRs 020-023)
+│   │   └── promptsec_quarantine.rs    # quarantine reader (ADR-023)
+│   ├── kani/
+│   │   └── platform_io.rs             # Kani proof harness (ADR-025)
+│   ├── fixtures/
+│   │   ├── models/
+│   │   │   └── README.md              # tiny test GGUFs (Phase 3)
+│   │   └── manifests/
+│   │       └── test-model.json        # test manifest fixture
+│   └── golden/
+│       └── presets.json               # golden preset definitions
+│
+├── python/                             # Python SDK packaging
+│   ├── cibuildwheel.toml               # wheel build matrix config
+│   └── .github/workflows/
+│       └── wheels.yml                  # cp39–cp313 × {macos, manylinux, win}
+│
+├── nix/
+│   └── kani.nix                        # Nix derivation for Kani (ADR-025)
+│
+└── .github/workflows/
+    ├── ci.yml                          # fmt + clippy -D warnings + test + deny + traceability
+    ├── build-matrix.yml                # macOS + Windows + Linux builds
+    ├── wheels.yml                      # Python wheel build matrix (ADR-011)
+    ├── release.yml                     # stable + beta channel publish (ADR-013)
+    └── kani.yml                        # ADR-025 Kani verification (90% coverage gate)
