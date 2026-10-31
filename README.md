@@ -3,6 +3,7 @@
 ## Syed, Awase Khirni www.betaori.com
 
 **The Problem:** Running a trillion-parameter AI model typically requires a data center with racks of GPUs. Most of us don’t have that.
+Imagine the heat that is generated from this can also be used to heat your homes. thus reducing heating costs during winters.
 
 **The Solution:** EdgeForge is a desktop application that lets you run enormous Mixture-of-Experts (MoE) models on a single powerful workstation—no cloud, no subscriptions, no data leaving your machine.
 
