@@ -498,3 +498,153 @@ edgeforge/
 ```
 
 ---
+
+
+# ADR-017: Tiered Crowd Computing with Optimistic Verification
+
+Status: Approved
+Date: 2025-08-29
+Supersedes: The binary `self_only / trusted_peers / lan_open` policy from Phase 1 v1.0
+Related: ADR-008 (air-gapped default), ADR-018 (async verification), R-20 (prompt leakage), R-21 (verification latency)
+
+## Context
+
+Phase 1 v1.0's distributed mode is mTLS-gated and trust-based: you
+explicitly pair peers via a 6-digit code. This is appropriate for a
+trusted LAN pool but does not scale to a crowd/volunteer network where
+peers are heterogeneous, untrusted, and churning. The Risk Register's
+R-06 correctly warns that "2 nodes ≠ 2× speed," but it does not address
+verification, incentives, or fault tolerance in an open network.
+
+## Decision
+
+Replace the binary trust policy with a three-tier distribution model,
+each with its own trust and verification posture:
+
+### Tier 1: Trusted Mesh (current design, hardened)
+
+- Peers: ≤16, explicitly paired, mTLS.
+- Use case: Lab cluster, two workstations with fast interconnect.
+- Verification: Pre-shared certificates + optional activation checksums.
+- Fault tolerance: Heartbeat-driven eviction; re-fetch from SSD on peer loss.
+
+### Tier 2: Cooperative Pool (semi-trusted, e.g., team or org)
+
+- Peers: Up to 100, joined via org-level identity (SSO or signed invite).
+- Use case: Departmental GPU pool, shared research cluster.
+- Verification: Proof of Quality (PoQ) — sampled evaluator nodes score
+  candidate outputs; consensus determines reward/penalty.
+- Incentive: Credit-based (no crypto), redeemable against compute contributed.
+- Fault tolerance: Redundant expert assignment (send the same expert
+  request to 2 peers; accept first valid response).
+
+### Tier 3: Open Crowd (untrusted, volunteer network)
+
+- Peers: Unbounded, open membership.
+- Use case: Public inference commons (Folding@Home for LLMs).
+- Verification: Optimistic execution + eventual verification
+  (IETF ODSI-style). Incorrect executions are detected within the same
+  token step or shortly thereafter, enabling rapid fallback before
+  incorrect results propagate.
+- Sybil resistance: Economic stake or proof-of-work identity, not
+  administrative approval.
+- Incentive: Token-based rewards with dynamic pricing (PolyLink model).
+- Fault tolerance: Continuous churn is assumed, not avoided. Scalability
+  under churn is achieved by decentralized participant discovery, adaptive
+  assignment based on observed availability, and conservative state migration.
+
+## The MoE Advantage
+
+EdgeForge's MoE architecture is uniquely suited to crowd computing:
+
+- A volunteer with a single RTX 3090 (24 GB VRAM) can host 2–3 Q4_K_M
+  Mixtral experts comfortably (~1.5 GB each).
+- Only ~25% of parameters activate per token, so the network does not pay
+  for dormant compute.
+- The router can dispatch to the cheapest available expert provider rather
+  than the nearest peer.
+- Experts are independently activated sub-networks — unlike dense tensor
+  parallelism, no inter-expert coordination is needed mid-token.
+
+## Architectural Impact
+
+### New Crate: `edgeforge-crowd`
+
+Implements:
+1. Peer Reputation Graph — feeds into the streaming graph (ADR-014).
+2. Verification Pipeline — pluggable verifiers (PoQ, TIQE, activation
+   checksums) selectable per tier.
+3. Incentive Ledger — credit accounting for Tier 2, token accounting
+   for Tier 3. No on-chain dependency by default (air-gapped principle);
+   optional blockchain settlement via a feature flag.
+4. Churn-Resilient Scheduler — extends the L5 scheduler with
+   expert-level replication (k-of-n redundant execution) and
+   timeout-driven reassignment.
+
+### Extended `InferenceEngine` Trait
+
+```rust
+pub enum ExecutionMode {
+    Local,
+    DistributedTrusted,             // Tier 1
+    DistributedCooperative {        // Tier 2
+        verification: VerificationPolicy,
+        redundancy: RedundancyPolicy,
+    },
+    DistributedCrowd {              // Tier 3
+        verification: VerificationPolicy,
+        incentive: IncentivePolicy,
+        churn: ChurnPolicy,
+    },
+}
+```
+
+The `LoadedModel` carries a distribution manifest specifying which experts
+are available on which tiers, with fallback order.
+
+## Honesty Contract (per ADR-008 / R-06)
+
+When the user enables any tier above Local, the UI surfaces this warning
+verbatim:
+
+> Distributed mode increases capacity, not speed.
+> Verification adds latency. Only enable distributed mode for models that
+> cannot fit locally. Tier 3 (Open Crowd) is experimental and may produce
+> incorrect outputs that are corrected retroactively.
+
+The user must click "I understand" before the tier is activated.
+
+## Architectural Invariants
+
+1. Tier 3 is opt-in only. No code path may auto-enable it.
+2. Tier 3 peers never see raw prompts — only decontextualized expert
+   activations (R-20).
+3. Verification never blocks the token stream beyond 50 ms (ADR-018,
+   R-21). The `X-EdgeForge-Verification: pending` header is the escape valve.
+4. Tier 3 is labeled "Experimental" in the UI. Persistent watermark.
+
+## Consequences
+
+Positive:
+- EdgeForge scales from a single laptop to a global volunteer network
+  without changing the core inference engine.
+- The MoE architecture's natural expert-level parallelism makes crowd
+  computing viable where dense tensor parallelism would not be.
+- Tier 1 users see no behavior change from v1.0.
+
+Negative:
+- Three tiers means three verification code paths to maintain.
+- Tier 3's optimistic verification can produce incorrect outputs that are
+  corrected retroactively — users must understand this (the honesty
+  contract is the mitigation).
+- The incentive ledger introduces accounting complexity; Tier 3's
+  token-based system may require blockchain settlement (feature-flagged,
+  off by default per ADR-008).
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|---|---|
+| R-20: Prompt leakage / model extraction | Tier 3 sees only decontextualized activations; activation-level encryption; prompt content never in `ControlEvent` |
+| R-21: Verification latency exceeds SSE budget | 50 ms deadline + async pending/corrected headers (ADR-018) |
+| R-06: "2 nodes = 2× speed" misconception | Honesty contract verbatim in UI; user must click "I understand" |
