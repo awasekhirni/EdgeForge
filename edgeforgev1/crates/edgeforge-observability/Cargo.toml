@@ -1,0 +1,10 @@
+[package]
+name = "edgeforge-observability"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+[dependencies]
+edgeforge-core.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

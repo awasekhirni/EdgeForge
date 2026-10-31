@@ -1,0 +1,21 @@
+[package]
+name = "edgeforge-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+[dependencies]
+edgeforge-core.workspace = true
+edgeforge-security.workspace = true
+edgeforge-storage.workspace = true
+edgeforge-graph.workspace = true
+edgeforge-crowd.workspace = true
+edgeforge-runtime-sys.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
+[dev-dependencies]
+tempfile = "3.13"
