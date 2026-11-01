@@ -47,6 +47,7 @@ EdgeForge is a desktop application for macOS, Windows, and Linux that runs front
 
 ## Architecture
 
+<<<<<<< HEAD
 EdgeForge uses an 11-layer architecture with 18 Rust crates:
 
 ```
@@ -308,3 +309,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, coding standards
 ## License
 
 Apache-2.0. See [LICENSE](./LICENSE).
+=======
+11-layer architecture with 19 crates, 32 ADRs, 16 SQL migrations.
+See `docs/` for details.
+>>>>>>> 0316dbe53fcbd1446100c59a5febcc1481226053
