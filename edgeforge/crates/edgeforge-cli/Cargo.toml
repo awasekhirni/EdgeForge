@@ -1,0 +1,21 @@
+[package]
+name = "edgeforge-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+[[bin]]
+name = "edgeforge"
+path = "src/main.rs"
+[dependencies]
+edgeforge-core.workspace = true
+edgeforge-orchestration.workspace = true
+edgeforge-api.workspace = true
+edgeforge-observability.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+sqlx.workspace = true
+toml = "0.8"
+serde_json.workspace = true

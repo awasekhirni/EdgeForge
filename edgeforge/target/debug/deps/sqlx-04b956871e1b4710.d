@@ -1,0 +1,12 @@
+/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase5-Final/edgeforge/target/debug/deps/sqlx-04b956871e1b4710.d: /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/mod.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/mod.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/ty_match.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/spec_error.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.md /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/test.md /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/install_drivers_note.md
+
+/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase5-Final/edgeforge/target/debug/deps/libsqlx-04b956871e1b4710.rmeta: /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/mod.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/mod.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/ty_match.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/spec_error.rs /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.md /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/test.md /Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/install_drivers_note.md
+
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.rs:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/mod.rs:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/mod.rs:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/ty_match.rs:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/spec_error.rs:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/lib.md:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/macros/test.md:
+/Users/rayyan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.8.6/src/any/install_drivers_note.md:

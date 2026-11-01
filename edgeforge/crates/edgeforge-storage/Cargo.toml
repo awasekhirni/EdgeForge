@@ -1,0 +1,19 @@
+[package]
+name = "edgeforge-storage"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+[dependencies]
+edgeforge-core.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+tracing.workspace = true
+libc.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+parking_lot.workspace = true
+[dev-dependencies]
+tempfile = "3.13"
