@@ -4,9 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
 [[bin]]
 name = "edgeforge"
 path = "src/main.rs"
+
 [dependencies]
 edgeforge-core.workspace = true
 edgeforge-orchestration.workspace = true
@@ -19,3 +21,5 @@ anyhow.workspace = true
 sqlx.workspace = true
 toml = "0.8"
 serde_json.workspace = true
+ring.workspace = true
+hex.workspace = true

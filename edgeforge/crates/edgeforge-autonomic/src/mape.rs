@@ -1,5 +1,41 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # MAPE-K Loop Implementation (ADR-029)
+//!
+//! ## Purpose
+//! Runs the Monitor → Analyze → Plan → Execute cycle. Uses Statistical Process
+//! Control (Welford's algorithm) to distinguish common-cause variation
+//! (systemic) from special-cause variation (one-off).
+//!
+//! ## What This File Does
+//! - `MapeKConfig` — analyze_interval, batch_size, control_limit_sigmas, commit_generated_tests
+//! - `VariationKind` — CommonCause (systemic) / SpecialCause (one-off)
+//! - `MapeKLoop` — the loop orchestrator
+//! - `RollingStats` — Welford's online mean/variance calculator
+//! - `cycle_once()` — run one MAPE cycle, returns (remediation, result, generated_test)
+//!
+//! ## Dependencies
+//! - `crate::{AutonomicKnowledge, FailurePattern, Remediation, TestGenerator}`
+//! - `edgeforge_core::ControlEvent` — event stream
+//! - `parking_lot::Mutex` — for rolling stats
+//! - `tokio::sync::mpsc` — event receiver
+//!
+//! ## Output
+//! `Option<(Remediation, RemediationResult, Option<GeneratedTest>)>` — the
+//! remediation applied, its result, and any generated regression test.
+//!
+//! ## SPC Classification
+//! - **Common-cause** — within 3σ of rolling mean → systemic, requires process change
+//! - **Special-cause** — beyond 3σ → one-off, requires targeted fix
+//! - Requires ≥30 samples before classification is meaningful
+//!
+//! ## Function: cycle_once
+//! - **Purpose:** Run one Monitor → Analyze → Plan → Execute cycle
+//! - **Returns:** Option<(Remediation, RemediationResult, Option<GeneratedTest>)>
+//! - **Antifragile:** If remediation succeeds, generates a regression test
+//! - **Dependencies:** `extract_metric()` for SPC, `knowledge.detect_patterns()`,
+//!   `self.plan()`, `remediation.execute()`, `test_gen.generate()`
+
 use crate::{
     AutonomicAction, AutonomicKnowledge, FailurePattern, GeneratedTest, Remediation,
     RemediationResult, TestGenerator,
@@ -10,6 +46,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 #[derive(Clone, Debug)]
+/// `MapeKConfig` — see module documentation for purpose and usage.
 pub struct MapeKConfig {
     pub analyze_interval: Duration,
     pub analyze_batch_size: usize,
@@ -27,10 +64,12 @@ impl Default for MapeKConfig {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// `VariationKind` enumeration — see module documentation for variants.
 pub enum VariationKind {
     CommonCause,
     SpecialCause,
 }
+/// `MapeKLoop` — see module documentation for purpose and usage.
 pub struct MapeKLoop {
     config: MapeKConfig,
     events_rx: Mutex<mpsc::Receiver<ControlEvent>>,
@@ -78,6 +117,7 @@ impl RollingStats {
     }
 }
 impl MapeKLoop {
+    /// Creates a new instance with default configuration.
     pub fn new(
         config: MapeKConfig,
         events_rx: mpsc::Receiver<ControlEvent>,
@@ -92,6 +132,7 @@ impl MapeKLoop {
             stats: Mutex::new(std::collections::HashMap::new()),
         }
     }
+    /// Runs one MAPE-K cycle.
     pub async fn cycle_once(
         &self,
     ) -> Option<(Remediation, RemediationResult, Option<GeneratedTest>)> {

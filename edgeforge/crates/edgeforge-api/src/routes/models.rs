@@ -1,5 +1,27 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # GET /v1/models and GET /v1/models/:id
+//!
+//! ## Purpose
+//! List all imported models or fetch a specific model by ID.
+//!
+//! ## What This File Does
+//! - `list_models()` — calls state.models.list(), returns ModelsResponse
+//! - `get_model()` — calls state.models.get(), returns ModelInfo
+//!
+//! ## Dependencies
+//! - `edgeforge-orchestration::Models` — via AppState
+//! - `edgeforge-core::ModelId` — for ID parsing
+//! - `crate::{dto, middleware::ApiError, state::AppState}`
+//!
+//! ## Output
+//! `Json<ModelsResponse>` or `Json<ModelInfo>`.
+//!
+//! ## Function: list_models
+//! - **Purpose:** List all imported models, most-recently-used first
+//! - **Returns:** `Result<Json<ModelsResponse>, ApiError>`
+//! - **Dependencies:** `state.models.list()`
+
 use crate::{
     dto::{ModelInfo, ModelsResponse},
     middleware::ApiError,
@@ -10,6 +32,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+/// Returns the axum Router for this module's routes.
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/v1/models", get(list_models))

@@ -1,12 +1,24 @@
 [package]
 name = "edgeforge-runtime-sys"
+description = "Unsafe FFI bindings to llama.cpp (L4) — ADR-001, ADR-009"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 links = "llama"
+
+[features]
+default = []
+llama-backend = []
+
 [build-dependencies]
 cc.workspace = true
 cmake.workspace = true
 bindgen.workspace = true
+
 [dependencies]
+edgeforge-core.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tempfile = "3.13"

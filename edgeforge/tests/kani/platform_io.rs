@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 // Kani proof harness stubs for the PlatformIo trait (ADR-025).
 //
 // These stubs verify basic safety properties. Phase 5+ will expand them

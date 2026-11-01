@@ -1,15 +1,45 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Query Engine (ADR-014)
+//!
+//! ## Purpose
+//! Read-only query layer over GraphCore. The <10 µs p99 query contract is
+//! validated by the `query_latency` benchmark.
+//!
+//! ## What This File Does
+//! - `GraphQuery` — production StreamingGraph implementation
+//! - `GraphQueryError` — Unhealthy
+//! - Implements all StreamingGraph trait methods
+//! - `predicted_expert_set()` — H3 prediction from sequence history
+//!
+//! ## Dependencies
+//! - `crate::core_::GraphCore` — the graph store
+//! - `crate::{StreamingGraph, PeerEstimate, GraphError}`
+//! - `edgeforge_core::{Celsius, ControlEvent, ExpertId, LayerIdx, NodeId}`
+//!
+//! ## Output
+//! Query results: `Option<PeerEstimate>`, `Vec<(LayerIdx, ExpertId)>`, `u64`, `bool`.
+//!
+//! ## Function: predicted_expert_set
+//! - **Purpose:** H3 speculation — predict experts for the next N tokens
+//! - **Parameters:** `sequence: u64`, `n: u32` — sequence ID and prediction count
+//! - **Returns:** `Vec<(LayerIdx, ExpertId)>` — predicted experts (most recent first)
+//! - **Dependencies:** `self.core.history` — sequence routing history
+//! - **Algorithm:** Returns the last N (layer, expert) pairs from the sequence's
+//!   routing history, most recent first
+
 use crate::core_::GraphCore;
 use crate::{GraphError, PeerEstimate, StreamingGraph};
 use async_trait::async_trait;
 use edgeforge_core::{Celsius, ControlEvent, ExpertId, LayerIdx, NodeId};
 use std::sync::Arc;
 #[derive(Debug, thiserror::Error)]
+/// `GraphQueryError` enumeration — see module documentation for variants.
 pub enum GraphQueryError {
     #[error("unhealthy")]
     Unhealthy,
 }
+/// `GraphQuery` — see module documentation for purpose and usage.
 pub struct GraphQuery {
     pub(crate) core: Arc<GraphCore>,
 }

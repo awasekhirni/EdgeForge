@@ -1,5 +1,33 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Strongly-Typed Configuration
+//!
+//! ## Purpose
+//! Loads configuration from TOML files and environment variables with full
+//! type safety. Defaults honour ADR-008 (air-gapped) and ADR-002 (2 TB NVMe).
+//!
+//! ## What This File Does
+//! - Defines `Config` struct with sections: network, storage, inference, api,
+//!   observability, updates, paths
+//! - `Config::load()` — merges defaults → TOML file → env vars
+//! - `Config::validate()` — sanity-checks the config at startup
+//! - Defines `Precision` enum (FP32/FP16/BF16/Q8/Q4/Q3) with `bytes_per_param()`
+//! - Defines `PrecisionPreset` enum (Quality/Balanced/Fast/MaxQuality)
+//! - Defines `NetworkMode` (AirGapped/LanOpen/GlobalRelay)
+//! - Defines `Role` and `ChatMessage` for OpenAI-compatible chat
+//!
+//! ## Dependencies
+//! - `figment` — config loading (TOML + env providers)
+//! - `serde` — Serialize/Deserialize
+//!
+//! ## Output
+//! `Config` struct with all settings, validated at startup.
+//!
+//! ## Config Search Path
+//! 1. Built-in defaults
+//! 2. `~/.config/edgeforge/config.toml` (or `EDGEFORGE_CONFIG`)
+//! 3. Environment variables prefixed `EDGEFORGE_` (e.g. `EDGEFORGE_NETWORK__MODE`)
+
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -8,6 +36,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `Config` — see module documentation for purpose and usage.
 pub struct Config {
     pub network: NetworkConfig,
     pub storage: StorageConfig,
@@ -31,6 +60,7 @@ impl Default for Config {
     }
 }
 impl Config {
+    /// Loads a resource from storage.
     pub fn load() -> Result<Self, figment::Error> {
         let path = Self::default_path();
         let mut fig = Figment::from(Serialized::defaults(Self::default()));
@@ -40,6 +70,7 @@ impl Config {
         fig = fig.merge(Env::prefixed("EDGEFORGE_").split("__"));
         fig.extract()
     }
+    /// Default path — see module documentation for details.
     pub fn default_path() -> PathBuf {
         if let Ok(p) = std::env::var("EDGEFORGE_CONFIG") {
             return PathBuf::from(p);
@@ -55,6 +86,7 @@ impl Config {
         base.push("config.toml");
         base
     }
+    /// Validate — see module documentation for details.
     pub fn validate(&self) -> Result<(), String> {
         if self.storage.min_ssd_gib < 2 * 1024 {
             return Err(format!("min_ssd_gib must be >= {}", 2 * 1024));
@@ -67,6 +99,7 @@ impl Config {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `NetworkConfig` — see module documentation for purpose and usage.
 pub struct NetworkConfig {
     pub mode: NetworkMode,
     pub telemetry: bool,
@@ -85,6 +118,7 @@ impl Default for NetworkConfig {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// `NetworkMode` enumeration — see module documentation for variants.
 pub enum NetworkMode {
     AirGapped,
     LanOpen,
@@ -92,6 +126,7 @@ pub enum NetworkMode {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `StorageConfig` — see module documentation for purpose and usage.
 pub struct StorageConfig {
     pub min_ssd_gib: u64,
     pub default_precision: Precision,
@@ -116,6 +151,7 @@ impl Default for StorageConfig {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+/// `Precision` enumeration — see module documentation for variants.
 pub enum Precision {
     Fp32,
     Fp16,
@@ -137,6 +173,7 @@ impl Precision {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// `PrecisionPreset` enumeration — see module documentation for variants.
 pub enum PrecisionPreset {
     Quality,
     Balanced,
@@ -155,6 +192,7 @@ impl PrecisionPreset {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `InferenceConfig` — see module documentation for purpose and usage.
 pub struct InferenceConfig {
     pub interactive_slots: u32,
     pub batch_slots: u32,
@@ -173,6 +211,7 @@ impl Default for InferenceConfig {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `ApiConfig` — see module documentation for purpose and usage.
 pub struct ApiConfig {
     pub listen_addr: String,
     pub require_api_key: bool,
@@ -189,6 +228,7 @@ impl Default for ApiConfig {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `ObservabilityConfig` — see module documentation for purpose and usage.
 pub struct ObservabilityConfig {
     pub otlp_enabled: bool,
     pub otlp_endpoint: Option<String>,
@@ -205,6 +245,7 @@ impl Default for ObservabilityConfig {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `UpdatesConfig` — see module documentation for purpose and usage.
 pub struct UpdatesConfig {
     pub channel: ReleaseChannel,
     pub auto_install: bool,
@@ -219,12 +260,14 @@ impl Default for UpdatesConfig {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// `ReleaseChannel` enumeration — see module documentation for variants.
 pub enum ReleaseChannel {
     Stable,
     Beta,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `PathsConfig` — see module documentation for purpose and usage.
 pub struct PathsConfig {
     pub data_dir: PathBuf,
     pub model_dir: PathBuf,
@@ -249,12 +292,14 @@ impl Default for PathsConfig {
     }
 }
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+/// `ChatMessage` — see module documentation for purpose and usage.
 pub struct ChatMessage {
     pub role: Role,
     pub content: String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+/// `Role` enumeration — see module documentation for variants.
 pub enum Role {
     System,
     User,

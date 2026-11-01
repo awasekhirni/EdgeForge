@@ -1,10 +1,46 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # ORM Models — Model Registry (F-LOAD-01)
+//!
+//! ## Purpose
+//! Typed access to the `models` table. Provides CRUD operations for the model
+//! registry using sqlx::query_as.
+//!
+//! ## What This File Does
+//! - `ModelRow` — ORM row for the models table (FromRow)
+//! - `Models` — typed access struct owning a SqlitePool
+//! - `insert(row)` — insert a new model, returns ModelId
+//! - `list()` — list all models, most-recently-used first
+//! - `get(id)` — fetch a single model by ID
+//! - `delete(id)` — delete a model from the registry
+//! - `NewModelRow` — payload for insert
+//! - `ModelArch` — MoE/Dense/RWKV/Mamba
+//! - `now_ms()` — current unix timestamp in milliseconds
+//!
+//! ## Dependencies
+//! - `sqlx::{SqlitePool, FromRow}` — SQLite ORM
+//! - `edgeforge-core::{EdgeForgeError, ModelId, Precision}`
+//! - `serde` — for ModelRow serialization
+//!
+//! ## Output
+//! `Result<ModelId, EdgeForgeError>` from insert;
+//! `Result<Vec<ModelRow>, EdgeForgeError>` from list;
+//! `Result<Option<ModelRow>, EdgeForgeError>` from get.
+//!
+//! ## Function: insert
+//! - **Purpose:** Insert a new model into the registry
+//! - **Parameters:** `&NewModelRow` — model metadata (name, publisher, license, file info, precision, arch)
+//! - **Returns:** `Result<ModelId, EdgeForgeError>` — the new model's ULID
+//! - **Errors:** Database error if INSERT fails (e.g., constraint violation)
+//! - **Dependencies:** `sqlx::query` with bind parameters; `crate::db_err` for error conversion
+//! - **Side effects:** Inserts a row with `imported_at = now_ms()`, `last_used_at = NULL`
+
 use edgeforge_core::{EdgeForgeError, ModelId, Precision};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePool, FromRow};
 use std::path::PathBuf;
 #[derive(Clone, Debug, FromRow, Serialize, Deserialize)]
+/// `ModelRow` — see module documentation for purpose and usage.
 pub struct ModelRow {
     pub id: String,
     pub name: String,
@@ -23,9 +59,11 @@ pub struct ModelRow {
     pub last_used_at: Option<i64>,
 }
 impl ModelRow {
+    /// Id — see module documentation for details.
     pub fn id(&self) -> Result<ModelId, EdgeForgeError> {
         ModelId::parse(&self.id).map_err(|e| EdgeForgeError::Database(e.to_string()))
     }
+    /// Precision — see module documentation for details.
     pub fn precision(&self) -> Result<Precision, EdgeForgeError> {
         Ok(match self.precision.as_str() {
             "fp32" => Precision::Fp32,
@@ -38,13 +76,16 @@ impl ModelRow {
         })
     }
 }
+/// `Models` — see module documentation for purpose and usage.
 pub struct Models {
     pool: SqlitePool,
 }
 impl Models {
+    /// Creates a new instance with default configuration.
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
+    /// Inserts a new entry.
     pub async fn insert(&self, row: &NewModelRow) -> Result<ModelId, EdgeForgeError> {
         let id = ModelId::new();
         let now = now_ms();
@@ -53,6 +94,7 @@ impl Models {
             .execute(&self.pool).await.map_err(crate::db_err)?;
         Ok(id)
     }
+    /// Lists all entries.
     pub async fn list(&self) -> Result<Vec<ModelRow>, EdgeForgeError> {
         Ok(sqlx::query_as::<_, ModelRow>(
             "SELECT * FROM models ORDER BY COALESCE(last_used_at, imported_at) DESC",
@@ -61,6 +103,7 @@ impl Models {
         .await
         .map_err(crate::db_err)?)
     }
+    /// Retrieves an item from the cache.
     pub async fn get(&self, id: ModelId) -> Result<Option<ModelRow>, EdgeForgeError> {
         Ok(
             sqlx::query_as::<_, ModelRow>("SELECT * FROM models WHERE id = ?")
@@ -70,6 +113,7 @@ impl Models {
                 .map_err(crate::db_err)?,
         )
     }
+    /// Deletes an entry by ID.
     pub async fn delete(&self, id: ModelId) -> Result<(), EdgeForgeError> {
         sqlx::query("DELETE FROM models WHERE id = ?")
             .bind(id.to_string())
@@ -80,6 +124,7 @@ impl Models {
     }
 }
 #[derive(Clone, Debug)]
+/// `NewModelRow` — see module documentation for purpose and usage.
 pub struct NewModelRow {
     pub name: String,
     pub publisher: String,
@@ -119,6 +164,7 @@ fn arch_str(a: ModelArch) -> &'static str {
         ModelArch::Mamba => "mamba",
     }
 }
+/// Returns the current Unix timestamp in milliseconds.
 pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

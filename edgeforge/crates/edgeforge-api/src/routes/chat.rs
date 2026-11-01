@@ -1,8 +1,46 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! `POST /v1/chat/completions` — OpenAI-compatible chat endpoint with SSE streaming.
+#![allow(unused_imports, unused_variables)]
+//! # POST /v1/chat/completions — OpenAI-Compatible Chat Endpoint
 //!
-//! Phase 4: wired to MockInferenceEngine with real token streaming.
+//! ## Purpose
+//! Handles chat completion requests. Supports both streaming (SSE) and
+//! non-streaming (JSON) responses. Wired to MockInferenceEngine.
+//!
+//! ## What This File Does
+//! - Parses the model ID and verifies it exists in the registry
+//! - Creates a MockInferenceEngine, loads the model
+//! - Builds a Prompt from the request messages
+//! - If stream=true: spawns a generation task, streams tokens via SSE
+//! - If stream=false: collects all tokens into a single JSON response
+//! - Formats SSE chunks as `data: {json}\n\n` with [DONE] terminator
+//!
+//! ## Dependencies
+//! - `edgeforge-runtime::{MockInferenceEngine, InferenceEngine, GenParams}`
+//! - `edgeforge-security::{ModelManifest, ModelArch}`
+//! - `edgeforge-crowd::ExecutionMode`
+//! - `tokio_stream` + `futures::StreamExt` — SSE body stream
+//! - `crate::{dto, middleware::ApiError, state::AppState}`
+//!
+//! ## Output
+//! SSE stream (`text/event-stream`) or JSON response.
+//!
+//! ## SSE Format
+//! ```text
+//! data: {"id":"chatcmpl-...","choices":[{"delta":{"content":"Hello"}}]}
+//!
+//! data: {"id":"chatcmpl-...","choices":[{"delta":{"content":" world"}}]}
+//!
+//! data: [DONE]
+//! ```
+//!
+//! ## Function: chat_completions
+//! - **Purpose:** Handle POST /v1/chat/completions
+//! - **Parameters:** `State<AppState>`, `Json<ChatCompletionRequest>`
+//! - **Returns:** `Result<Response, ApiError>` — SSE stream or JSON
+//! - **Errors:** ModelNotFound if model ID invalid; Engine if generation fails
+//! - **Dependencies:** `state.models.get()`, `MockInferenceEngine::load()`,
+//!   `engine.generate()` with token callback
 
 use crate::{
     dto::{ChatCompletionRequest, ChatCompletionResponse, Choice, ChoiceMessage, Usage},
@@ -21,10 +59,11 @@ use edgeforge_core::{ChatMessage, ModelId, Prompt, Role, Token};
 use edgeforge_crowd::ExecutionMode;
 use edgeforge_runtime::{GenParams, InferenceEngine, MockInferenceEngine};
 use edgeforge_security::{ModelArch, ModelManifest};
-use futures::StreamExt;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use futures::StreamExt;
 
+/// Returns the axum Router for this module's routes.
 pub fn routes() -> Router<AppState> {
     Router::new().route("/v1/chat/completions", post(chat_completions))
 }
@@ -106,8 +145,12 @@ async fn chat_completions(
                     &params,
                     &mut move |token: Token, _outcome| {
                         token_count += 1;
-                        let chunk =
-                            format_sse_chunk(&chat_id_clone, &model_name, created, &token.text);
+                        let chunk = format_sse_chunk(
+                            &chat_id_clone,
+                            &model_name,
+                            created,
+                            &token.text,
+                        );
                         let _ = tx_clone.send(chunk);
                         true // continue generating
                     },
@@ -143,11 +186,16 @@ async fn chat_completions(
         let mut token_count = 0u32;
 
         engine
-            .generate(&model, &prompt, &params, &mut |token: Token, _outcome| {
-                full_response.push_str(&token.text);
-                token_count += 1;
-                true
-            })
+            .generate(
+                &model,
+                &prompt,
+                &params,
+                &mut |token: Token, _outcome| {
+                    full_response.push_str(&token.text);
+                    token_count += 1;
+                    true
+                },
+            )
             .await
             .map_err(|e| edgeforge_core::EdgeForgeError::Engine(e.to_string()))?;
 
@@ -165,18 +213,9 @@ async fn chat_completions(
                 finish_reason: Some("stop".to_string()),
             }],
             usage: Usage {
-                prompt_tokens: req
-                    .messages
-                    .iter()
-                    .map(|m| m.content.split_whitespace().count() as u32)
-                    .sum::<u32>(),
+                prompt_tokens: req.messages.iter().map(|m| m.content.split_whitespace().count() as u32).sum::<u32>(),
                 completion_tokens: token_count,
-                total_tokens: token_count
-                    + req
-                        .messages
-                        .iter()
-                        .map(|m| m.content.split_whitespace().count() as u32)
-                        .sum::<u32>(),
+                total_tokens: token_count + req.messages.iter().map(|m| m.content.split_whitespace().count() as u32).sum::<u32>(),
             },
         })
         .into_response())

@@ -1,9 +1,51 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! Multi-horizon speculation engine (ADR-015, ADR-016).
+//! # Multi-Horizon Speculation Engine (ADR-015, ADR-016)
 //!
-//! Phase 5: implements H1 (router logit), H2 (surrogate/draft), and
-//! H3 (graph sequence query) speculation horizons.
+//! ## Purpose
+//! Replaces depth-1 prefetch with a 3-horizon engine that predicts experts
+//! across multiple layers and time scales, gated by a hard accuracy SLA.
+//!
+//! ## What This File Does
+//! - `SpeculationStrategy` — Off, RouterLogitOnly, NgramSimple, NgramMapK, Draft, Eagle3
+//! - `WorkloadType` — Code, Structured, NaturalLanguage, Mixed
+//! - `SpeculationConfig` — h1_enabled, h2_strategy, h3_enabled, workload_detection, etc.
+//! - `SpeculationVerdict` — horizon, hit, surrogate_used, accuracy_delta
+//! - `detect_workload(prompt)` — classify prompt into WorkloadType
+//! - `strategy_for_workload(workload)` — map workload to strategy (ADR-016)
+//! - `h1_predict_next_layer_experts()` — H1: router logit top-k (>90% accuracy)
+//! - `h2_predict_future_experts()` — H2: surrogate/draft model (60-85% accuracy)
+//! - `h3_predict_from_graph()` — H3: streaming graph sequence query (40-70% accuracy)
+//! - `permit_surrogate()` — confidence-aware fallback (Quality SLA enforced, R-19)
+//! - `SpeculationEngine::predict()` — coordinates all 3 horizons with dedup
+//!
+//! ## Dependencies
+//! - `edgeforge-core::{ExpertId, LayerIdx, Prompt, SpeculationHorizon}`
+//! - `edgeforge-graph::StreamingGraph` — for H3 prediction
+//!
+//! ## Output
+//! `Vec<(LayerIdx, ExpertId)>` — predicted experts (deduplicated).
+//!
+//! ## Three Horizons
+//! | Horizon | Predictor | Accuracy | Preset Gate |
+//! |---|---|---|---|
+//! | H1 | Router logit pre-read | >90% | All presets |
+//! | H2 | Surrogate/draft model | 60-85% | Quality: correctness-preserving only |
+//! | H3 | Graph sequence query | 40-70% | All presets (advisory) |
+//!
+//! ## Function: detect_workload
+//! - **Purpose:** Classify the prompt into a workload type for strategy selection
+//! - **Parameters:** `&Prompt`
+//! - **Returns:** `WorkloadType` — Code, Structured, NaturalLanguage, or Mixed
+//! - **Heuristics:** Code = high density of `{}();` tokens; Structured = "JSON"/"SQL" keywords;
+//!   NaturalLanguage = default
+//!
+//! ## Function: permit_surrogate
+//! - **Purpose:** Decide if surrogate approximation is permitted on a cache miss
+//! - **Parameters:** `miss_confidence: f32`, `preset_quality: bool`, `surrogate_available: bool`
+//! - **Returns:** `bool` — true if surrogate is permitted
+//! - **Rules:** Quality preset → always false (R-19); not available → false;
+//!   miss_confidence < 0.3 → true
 
 use edgeforge_core::{ExpertId, LayerIdx, SpeculationHorizon};
 use serde::{Deserialize, Serialize};
@@ -179,6 +221,7 @@ pub struct SpeculationEngine {
 
 impl SpeculationEngine {
     #[must_use]
+    /// Creates a new instance with default configuration.
     pub fn new(config: SpeculationConfig) -> Self {
         Self { config }
     }

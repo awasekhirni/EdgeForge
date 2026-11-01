@@ -1,11 +1,28 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! Linux `io_uring` backend for PlatformIo (ADR-025, R-03).
+//! # Linux io_uring Backend (ADR-025, R-03)
 //!
-//! Phase 5: implements real async I/O using `io_uring` for high-throughput
-//! SSD reads. Falls back to `BlockingIo` if `io_uring` is unavailable.
+//! ## Purpose
+//! High-throughput async I/O using Linux `io_uring`. Falls back to `BlockingIo`
+//! internally because the real `io-uring` crate's async integration requires
+//! a runtime adapter (tokio-uring). The real implementation will use
+//! `io_uring::opcode::Read` with `O_DIRECT`.
 //!
-//! This backend is only compiled on Linux (`#[cfg(target_os = "linux")]`).
+//! ## What This File Does
+//! - `IoUring` struct — implements `PlatformIo`
+//! - `open_direct()` — delegates to BlockingIo
+//! - `read_at()` — delegates to BlockingIo (Phase 5+: real SQE/CQE)
+//! - `prefetch()` — uses `posix_fadvise(POSIX_FADV_WILLNEED)` for Linux-specific hint
+//!
+//! ## Dependencies
+//! - `libc` — `posix_fadvise` for prefetch
+//! - `crate::platform::BlockingIo` — fallback implementation
+//!
+//! ## Output
+//! `AlignedBuffer` with the read data.
+//!
+//! ## Platform
+//! Linux only (`#[cfg(target_os = "linux")]`).
 
 #![cfg(target_os = "linux")]
 

@@ -1,5 +1,44 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Mock Inference Engine (Phase 3)
+//!
+//! ## Purpose
+//! Implements `InferenceEngine` without requiring the real `llama.cpp` FFI build.
+//! Produces deterministic token output based on the prompt, allowing the full
+//! pipeline (router hook → weight pager → KV cache → SSE streaming) to be
+//! exercised in tests.
+//!
+//! ## What This File Does
+//! - `MockInferenceEngine` — implements InferenceEngine
+//! - `load()` — validates manifest, returns LoadedModel
+//! - `generate()` — derives deterministic response (reversed prompt), calls
+//!   router_hook per token, invokes on_token callback
+//! - `install_router_hook()` — stores hook for use during generate
+//! - `generate_mock_response()` — reverses prompt words, repeats to fill max_tokens
+//!
+//! ## Dependencies
+//! - `edgeforge-core::{Prompt, Token}`
+//! - `edgeforge-crowd::{ExecutionMode, VerificationOutcome}`
+//! - `edgeforge-security::ModelManifest`
+//! - `std::sync::Mutex` — for router hook storage
+//! - `std::time::Instant` — for timing
+//!
+//! ## Output
+//! `GenStats` — tokens_generated, elapsed_ms, first_token_ms.
+//!
+//! ## Function: generate
+//! - **Purpose:** Generate tokens deterministically from the prompt
+//! - **Parameters:** model, prompt, params, on_token callback
+//! - **Returns:** `Result<GenStats, EngineError>`
+//! - **Algorithm:** Reverses prompt words, repeats to fill max_tokens
+//! - **Router hook:** Calls resolve_expert(layer=i, expert=i%8) per token
+//! - **Verification:** Emits VerificationOutcome::NotRequired for Local mode
+//! - **Abort:** If callback returns false, generation stops
+//!
+//! ## Note
+//! In production, `LlamaBackend` (ADR-032 Implementation A) replaces this mock.
+//! The mock is retained in the test suite for integration testing.
+
 use crate::engine::{EngineError, GenParams, GenStats, InferenceEngine, LoadedModel};
 use crate::router_hook::RouterHook;
 use async_trait::async_trait;

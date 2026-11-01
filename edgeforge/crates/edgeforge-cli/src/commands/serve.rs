@@ -1,11 +1,41 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # `edgeforge serve` — Start the API Server
+//!
+//! ## Purpose
+//! Opens the SQLite database, applies migrations, creates AppState, and starts
+//! the axum API server.
+//!
+//! ## What This File Does
+//! - Resolves the listen address (from args or config)
+//! - Opens SQLite database at `data_dir/edgeforge.db`
+//! - Runs all 16 SQLx migrations
+//! - Creates AppState with Models + Jobs
+//! - Calls `edgeforge_api::serve(addr, state)`
+//!
+//! ## Dependencies
+//! - `edgeforge-api::{AppState, serve}` — API server
+//! - `edgeforge-orchestration::{Models, Jobs}` — ORM
+//! - `sqlx::sqlite::SqlitePoolOptions` — connection pool
+//! - `sqlx::migrate!` — migration runner
+//!
+//! ## Output
+//! Runs the API server until Ctrl+C or shutdown.
+//!
+//! ## Function: run
+//! - **Purpose:** Start the API server
+//! - **Parameters:** `ServeArgs` (listen override), `Config`
+//! - **Returns:** `anyhow::Result<()>`
+//! - **Side effects:** Creates `data_dir` if it doesn't exist; opens SQLite DB;
+//!   applies migrations; binds TCP listener
+
 use super::ServeArgs;
 use edgeforge_api::AppState;
 use edgeforge_core::Config;
 use edgeforge_orchestration::{Jobs, Models};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::net::SocketAddr;
+/// Executes the main logic of this function.
 pub async fn run(args: ServeArgs, cfg: Config) -> anyhow::Result<()> {
     let addr_str = args.listen.unwrap_or_else(|| cfg.api.listen_addr.clone());
     let addr: SocketAddr = addr_str

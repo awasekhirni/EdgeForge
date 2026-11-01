@@ -1,5 +1,32 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Platform-Abstracted Async File I/O
+//!
+//! ## Purpose
+//! The single abstraction over `io_uring` (Linux), `IOCP` (Windows), and
+//! `dispatch_io` (macOS). All weight and KV-cache reads funnel through this
+//! trait so the rest of the engine is portable.
+//!
+//! ## What This File Does
+//! - `PlatformIo` trait — open_direct, read_at, read_batch, prefetch
+//! - `DirectFile` — handle to a file opened with direct-I/O semantics
+//! - `ReadRequest` — batch read request (id + offset + len)
+//! - `ReadResult` — completed read (id + buffer)
+//! - `AlignedBuffer` — buffer aligned to the platform's direct-I/O boundary
+//! - `IoError` — I/O error enum (Io, InvalidOffset)
+//!
+//! ## Dependencies
+//! - `async-trait` — for async trait methods
+//! - `edgeforge-core::EdgeForgeError` — for error conversion
+//!
+//! ## Output
+//! `AlignedBuffer` containing the read data, or `IoError` on failure.
+//!
+//! ## Architectural Note
+//! All methods are cancellation-safe: dropping the future does not corrupt
+//! the I/O queue. Phase 5 implements the real io_uring backend; BlockingIo
+//! is the portable fallback for tests.
+
 pub mod blocking;
 #[cfg(target_os = "macos")]
 pub mod dispatch_io;
@@ -15,6 +42,7 @@ use edgeforge_core::EdgeForgeError;
 pub use iouring::IoUring;
 use std::path::{Path, PathBuf};
 #[derive(Debug, thiserror::Error)]
+/// `IoError` enumeration — see module documentation for variants.
 pub enum IoError {
     #[error("I/O error on {path:?}: {source}")]
     Io {
@@ -33,6 +61,7 @@ impl From<IoError> for EdgeForgeError {
         }
     }
 }
+/// `DirectFile` — see module documentation for purpose and usage.
 pub struct DirectFile {
     pub(crate) path: PathBuf,
     pub(crate) size: u64,
@@ -46,6 +75,7 @@ impl DirectFile {
     }
 }
 #[derive(Clone, Copy, Debug)]
+/// `ReadRequest` — see module documentation for purpose and usage.
 pub struct ReadRequest<'a> {
     pub id: u64,
     pub offset: u64,
@@ -63,11 +93,13 @@ impl<'a> ReadRequest<'a> {
     }
 }
 #[derive(Debug)]
+/// `ReadResult` — see module documentation for purpose and usage.
 pub struct ReadResult {
     pub id: u64,
     pub buffer: AlignedBuffer,
 }
 #[derive(Debug)]
+/// `AlignedBuffer` — see module documentation for purpose and usage.
 pub struct AlignedBuffer {
     pub data: Vec<u8>,
 }
@@ -83,6 +115,7 @@ impl AlignedBuffer {
     }
 }
 #[async_trait]
+/// The `PlatformIo` trait — see module documentation for the contract.
 pub trait PlatformIo: Send + Sync + 'static {
     async fn open_direct(&self, path: &Path) -> Result<DirectFile, IoError>;
     async fn read_at(

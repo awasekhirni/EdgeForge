@@ -1,5 +1,43 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Signed Model Manifest Verification (F-LOAD-04, F-SEC-05)
+//!
+//! ## Purpose
+//! Verifies that a model's manifest is signed by a trusted publisher and that
+//! the on-disk weight file matches the manifest's SHA-256 hash. Also checks
+//! the license against the user's intended use case.
+//!
+//! ## What This File Does
+//! - `ModelManifest` — the manifest struct (schema v1)
+//! - `ManifestVerifier` trait — verify_signature, verify_integrity, check_license
+//! - `DefaultManifestVerifier` — production impl using ed25519-dalek
+//! - `LicenseVerdict` — Permitted / Forbidden / UnsignedRequiresAcknowledgement
+//! - `UseCase` — Personal / Research / Commercial
+//! - `ModelArch` — MoE / Dense / RWKV / Mamba
+//!
+//! ## Dependencies
+//! - `ed25519-dalek` — Ed25519 signature generation and verification
+//! - `ring::digest` — SHA-256 streaming hash
+//! - `base64` — signature encoding
+//! - `hex` — hash encoding
+//! - `serde_json` — canonical JSON for signed message
+//!
+//! ## Output
+//! `Result<(), EdgeForgeError>` — Ok if manifest is valid, Err otherwise.
+//!
+//! ## Function: DefaultManifestVerifier::verify_signature
+//! - **Purpose:** Verify the publisher's Ed25519 signature over the manifest
+//! - **Parameters:** `&ModelManifest` — the manifest to verify
+//! - **Returns:** `Result<(), EdgeForgeError>` — Ok if signature valid
+//! - **Errors:** ManifestSignatureInvalid if signature is missing, key untrusted, or verify fails
+//! - **Dependencies:** Calls `signed_message()` to canonicalize, then `VerifyingKey::verify()`
+//!
+//! ## Function: DefaultManifestVerifier::check_license
+//! - **Purpose:** Check if the manifest's license permits the user's use case
+//! - **Parameters:** `&ModelManifest`, `UseCase`
+//! - **Returns:** `LicenseVerdict` — Permitted, Forbidden, or UnsignedRequiresAcknowledgement
+//! - **Dependencies:** Checks `manifest.signature.is_none()` and `manifest.acceptable_uses`
+
 use async_trait::async_trait;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgeforge_core::{EdgeForgeError, ModelId, Precision};
@@ -7,12 +45,14 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// `UseCase` enumeration — see module documentation for variants.
 pub enum UseCase {
     Personal,
     Research,
     Commercial,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// `LicenseVerdict` enumeration — see module documentation for variants.
 pub enum LicenseVerdict {
     Permitted,
     Forbidden(String),
@@ -20,6 +60,7 @@ pub enum LicenseVerdict {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+/// `ModelArch` enumeration — see module documentation for variants.
 pub enum ModelArch {
     Moe,
     Dense,
@@ -27,6 +68,7 @@ pub enum ModelArch {
     Mamba,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
+/// `ModelManifest` — see module documentation for purpose and usage.
 pub struct ModelManifest {
     pub schema_version: u32,
     pub id: ModelId,
@@ -48,6 +90,7 @@ pub struct ModelManifest {
     pub publisher_key_fingerprint: Option<String>,
 }
 #[async_trait]
+/// The `ManifestVerifier` trait — see module documentation for the contract.
 pub trait ManifestVerifier: Send + Sync + 'static {
     async fn verify_signature(&self, manifest: &ModelManifest) -> Result<(), EdgeForgeError>;
     async fn verify_integrity(
@@ -59,13 +102,16 @@ pub trait ManifestVerifier: Send + Sync + 'static {
     }
     fn check_license(&self, manifest: &ModelManifest, use_case: UseCase) -> LicenseVerdict;
 }
+/// `DefaultManifestVerifier` — see module documentation for purpose and usage.
 pub struct DefaultManifestVerifier {
     trusted: Vec<(String, VerifyingKey)>,
 }
 impl DefaultManifestVerifier {
+    /// Creates a new instance with default configuration.
     pub fn new(trusted: Vec<(String, VerifyingKey)>) -> Self {
         Self { trusted }
     }
+    /// No trusted keys — see module documentation for details.
     pub fn no_trusted_keys() -> Self {
         Self {
             trusted: Vec::new(),

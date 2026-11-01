@@ -6,9 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 [dependencies]
 edgeforge-core.workspace = true
+edgeforge-observability.workspace = true
 edgeforge-runtime.workspace = true
 edgeforge-storage.workspace = true
 edgeforge-security.workspace = true
+edgeforge-crowd.workspace = true
 ulid.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
@@ -16,3 +18,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+tempfile = "3.13"

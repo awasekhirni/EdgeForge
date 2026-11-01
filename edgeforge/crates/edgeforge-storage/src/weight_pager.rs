@@ -1,10 +1,45 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! Weight pager (F-TIER-01, F-TIER-02, F-TIER-05).
+#![allow(unused_imports, unused_variables)]
+//! # Weight Pager (F-TIER-01, F-TIER-02, F-TIER-05)
 //!
-//! Phase 4: implements real `page_in()` using the PlatformIo backend.
-//! Pages expert weight tensors from SSD into RAM, with offset calculation
-//! based on the model manifest's expert pool layout.
+//! ## Purpose
+//! Pages expert weight tensors from SSD into RAM. The dense core is pinned in
+//! RAM at load time; experts are paged on demand based on the MoE router's
+//! top-k selection.
+//!
+//! ## What This File Does
+//! - `WeightPageId` — identifies a page (layer + expert + page index)
+//! - `WeightPage` — a resident page (id + bytes)
+//! - `WeightPagerConfig` — page_size, ram_budget, ssd_path
+//! - `WeightPager` — owns PlatformIo backend, opens file lazily
+//! - `page_in(id)` — reads a page at layer-based offset
+//! - `page_in_at(offset, len, id)` — reads at a specific offset
+//! - `page_in_batch(ids)` — batch read using PlatformIo::read_batch
+//! - `prefetch_next_layer(layer)` — OS prefetch hint for layer N+1
+//!
+//! ## Dependencies
+//! - `crate::platform::PlatformIo` — async I/O backend
+//! - `parking_lot::Mutex` — thread-safe lazy file opening
+//! - `edgeforge_core::{Bytes, ExpertId, LayerIdx, ModelId}`
+//!
+//! ## Output
+//! `WeightPage` containing the read bytes, or `EdgeForgeError` on failure.
+//!
+//! ## Function: page_in
+//! - **Purpose:** Read a weight page for a specific (layer, expert) pair
+//! - **Parameters:** `WeightPageId` — identifies which page to read
+//! - **Returns:** `Result<WeightPage, EdgeForgeError>`
+//! - **Errors:** Io if file cannot be read; InvalidOffset if offset out of range
+//! - **Dependencies:** `self.ensure_open()`, `self.io.read_at()`
+//! - **Offset calculation:** `layer * page_size` (simplified; real impl uses manifest layout)
+//!
+//! ## Function: page_in_batch
+//! - **Purpose:** Issue a batch of page-in requests for higher throughput
+//! - **Parameters:** `&[WeightPageId]` — pages to read
+//! - **Returns:** `Result<Vec<WeightPage>, EdgeForgeError>`
+//! - **Dependencies:** `self.io.read_batch()` — single io_uring SQE chain
+//! - **Correlation:** Results are correlated by index (0-based) to input IDs
 
 use crate::platform::{DirectFile, PlatformIo};
 use edgeforge_core::{Bytes, ExpertId, LayerIdx, ModelId};
@@ -44,6 +79,7 @@ pub struct WeightPager {
 }
 
 impl WeightPager {
+    /// Creates a new instance with default configuration.
     pub fn new(config: WeightPagerConfig, io: Arc<dyn PlatformIo>, model_id: ModelId) -> Self {
         Self {
             config,
@@ -72,7 +108,7 @@ impl WeightPager {
         offset: u64,
         len: usize,
         id: WeightPageId,
-    ) -> Result<WeightPage, edgeForgeError> {
+    ) -> Result<WeightPage, EdgeForgeErrorAlias> {
         self.open_if_needed().await?;
         let file_guard = self.file.lock();
         let file = file_guard.as_ref().expect("file opened");
@@ -138,18 +174,20 @@ impl WeightPager {
     }
 
     #[must_use]
+    /// Config — see module documentation for details.
     pub fn config(&self) -> &WeightPagerConfig {
         &self.config
     }
 
     #[must_use]
+    /// Model id — see module documentation for details.
     pub fn model_id(&self) -> ModelId {
         self.model_id
     }
 }
 
 // Type alias for convenience.
-type edgeForgeError = edgeforge_core::EdgeForgeError;
+type EdgeForgeErrorAlias = edgeforge_core::EdgeForgeError;
 
 #[cfg(test)]
 mod tests {

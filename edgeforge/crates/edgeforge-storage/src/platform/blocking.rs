@@ -1,9 +1,39 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Portable Blocking I/O Backend
+//!
+//! ## Purpose
+//! Fallback `PlatformIo` implementation using synchronous `pread` under a
+//! Tokio blocking pool task. Correct but not optimal — the io_uring/IOCP/
+//! dispatch_io backends replace it in production.
+//!
+//! ## What This File Does
+//! - `BlockingIo` struct — implements `PlatformIo`
+//! - `open_direct()` — opens file for reading (no O_DIRECT in test mode)
+//! - `read_at()` — spawn_blocking + std::fs seek + read
+//! - `read_batch()` — sequential implementation of batch reads
+//! - `prefetch()` — no-op (production backends use posix_fadvise)
+//!
+//! ## Dependencies
+//! - `tokio::task::spawn_blocking` — offloads sync I/O to blocking pool
+//! - `std::fs` — synchronous file operations
+//! - `std::io::{Read, Seek}` — seek + read
+//!
+//! ## Output
+//! `AlignedBuffer` with the read data, or `IoError` on failure.
+//!
+//! ## Function: read_at
+//! - **Purpose:** Read `len` bytes at `offset` from the file
+//! - **Parameters:** `&DirectFile`, `offset: u64`, `len: usize`
+//! - **Returns:** `Result<AlignedBuffer, IoError>`
+//! - **Errors:** InvalidOffset if offset > file size; Io on read failure
+//! - **Dependencies:** `tokio::task::spawn_blocking`, `std::fs::File`
+
 use crate::platform::{AlignedBuffer, DirectFile, IoError, PlatformIo, ReadRequest, ReadResult};
 use async_trait::async_trait;
 use std::path::Path;
 use tokio::task;
+/// `BlockingIo` — see module documentation for purpose and usage.
 pub struct BlockingIo;
 impl BlockingIo {
     pub fn new() -> Self {

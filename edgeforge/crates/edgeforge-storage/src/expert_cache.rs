@@ -1,9 +1,41 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+#![allow(unused_imports, unused_variables)]
+//! # RAM-Resident LRU Expert Cache (F-TIER-01)
+//!
+//! ## Purpose
+//! Holds the most recently used expert weight tensors in RAM so the weight
+//! pager can skip SSD reads for hot experts. Eviction is LRU; experts are
+//! read-only so eviction is a pure drop (no write-back).
+//!
+//! ## What This File Does
+//! - `ExpertCacheConfig` — ram_budget
+//! - `CacheKey` — (LayerIdx, ExpertId)
+//! - `ExpertCache` — thread-safe LRU cache using parking_lot::Mutex
+//! - `get(key)` — look up expert, bump LRU clock on hit
+//! - `put(key, bytes)` — insert, evict LRU until budget fits
+//! - `current_bytes()` — current RAM usage
+//! - `len()` / `is_empty()` — entry count
+//!
+//! ## Dependencies
+//! - `parking_lot::Mutex` — thread-safe interior mutability
+//! - `edgeforge_core::{Bytes, ExpertId, LayerIdx}`
+//!
+//! ## Output
+//! `Option<Vec<u8>>` — Some on cache hit, None on miss.
+//!
+//! ## Function: put
+//! - **Purpose:** Insert an expert into the cache, evicting LRU entries if needed
+//! - **Parameters:** `CacheKey` (layer + expert), `Vec<u8>` (weight bytes)
+//! - **Side effects:** May evict 0..N LRU entries to fit the budget
+//! - **Dependencies:** `Self::pick_lru()` for eviction selection
+//! - **LRU clock:** Monotonic counter incremented on each get/put
+
 use edgeforge_core::{Bytes, ExpertId, LayerIdx};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 #[derive(Clone, Debug)]
+/// `ExpertCacheConfig` — see module documentation for purpose and usage.
 pub struct ExpertCacheConfig {
     pub ram_budget: Bytes,
 }
@@ -15,10 +47,12 @@ impl Default for ExpertCacheConfig {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// `CacheKey` — see module documentation for purpose and usage.
 pub struct CacheKey {
     pub layer: LayerIdx,
     pub expert: ExpertId,
 }
+/// `ExpertCache` — see module documentation for purpose and usage.
 pub struct ExpertCache {
     inner: Mutex<Inner>,
     config: ExpertCacheConfig,
@@ -34,6 +68,7 @@ struct CacheEntry {
     last_access: u64,
 }
 impl ExpertCache {
+    /// Creates a new instance with default configuration.
     pub fn new(config: ExpertCacheConfig) -> Self {
         Self {
             inner: Mutex::new(Inner {
@@ -44,6 +79,7 @@ impl ExpertCache {
             config,
         }
     }
+    /// Retrieves an item from the cache.
     pub fn get(&self, key: CacheKey) -> Option<Vec<u8>> {
         let mut inner = self.inner.lock();
         inner.clock += 1;
@@ -53,6 +89,7 @@ impl ExpertCache {
         entry.last_access = clock;
         Some(entry.bytes.clone())
     }
+    /// Inserts an item into the cache.
     pub fn put(&self, key: CacheKey, bytes: Vec<u8>) {
         let mut inner = self.inner.lock();
         let incoming = bytes.len() as u64;
@@ -84,12 +121,15 @@ impl ExpertCache {
         );
         inner.current_bytes += incoming;
     }
+    /// Returns the current bytes resident in RAM.
     pub fn current_bytes(&self) -> u64 {
         self.inner.lock().current_bytes
     }
+    /// Returns the number of elements.
     pub fn len(&self) -> usize {
         self.inner.lock().entries.len()
     }
+    /// Returns `true` if `empty` is true.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

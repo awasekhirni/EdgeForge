@@ -1,5 +1,31 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Domain Newtypes
+//!
+//! ## Purpose
+//! Type-safe identifiers and domain types that prevent argument-order bugs.
+//! Each ID type wraps a `ULID` for sortability and uniqueness.
+//!
+//! ## What This File Does
+//! - Defines `ModelId`, `JobId`, `ConversationId`, `MessageId`, `NodeId` via macro
+//! - Defines `LayerIdx` (zero-based transformer layer index)
+//! - Defines `ExpertId` (expert within an MoE layer)
+//! - Defines `ExpertSource` (RAM cache / local SSD / remote peer)
+//! - Defines `Token` (generated text + vocab ID)
+//! - Defines `Prompt` (sequence of chat messages)
+//!
+//! ## Dependencies
+//! - `serde` — Serialize/Deserialize for all types
+//! - `ulid::Ulid` — 128-bit sortable identifier
+//!
+//! ## Output
+//! Type-safe newtypes that the compiler uses to catch argument-order errors.
+//!
+//! ## Key Functions
+//! - `ModelId::new()` — generates a fresh ULID-based ID
+//! - `ModelId::parse(s)` — parses a 26-char ULID string
+//! - `Prompt::render_flat()` — renders prompt as `role: content\n` per message
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use ulid::Ulid;
@@ -15,6 +41,7 @@ macro_rules! id_newtype {
             pub fn new() -> Self {
                 Self(Ulid::new())
             }
+            /// Parse — see module documentation for details.
             pub fn parse(s: &str) -> Result<Self, ulid::DecodeError> {
                 Ulid::from_string(s).map(Self)
             }
@@ -44,6 +71,7 @@ id_newtype!(NodeId, "Node identifier.");
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
 #[serde(transparent)]
 #[repr(transparent)]
+/// `LayerIdx` — see module documentation for purpose and usage.
 pub struct LayerIdx(pub u32);
 impl LayerIdx {
     #[must_use]
@@ -54,19 +82,23 @@ impl LayerIdx {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 #[serde(transparent)]
 #[repr(transparent)]
+/// `ExpertId` — see module documentation for purpose and usage.
 pub struct ExpertId(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+/// `ExpertSource` enumeration — see module documentation for variants.
 pub enum ExpertSource {
     RamCache,
     LocalSsd,
     RemotePeer(NodeId),
 }
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+/// `Token` — see module documentation for purpose and usage.
 pub struct Token {
     pub text: String,
     pub id: u32,
 }
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+/// `Prompt` — see module documentation for purpose and usage.
 pub struct Prompt {
     pub messages: Vec<crate::config::ChatMessage>,
 }

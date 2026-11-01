@@ -15,6 +15,7 @@ members = [
     "crates/edgeforge-orchestration",
     "crates/edgeforge-autonomic",
     "crates/edgeforge-kpi",
+    "crates/edgeforge-perf",
     "crates/edgeforge-api",
     "crates/edgeforge-sdk-python",
     "crates/edgeforge-cli",
@@ -91,6 +92,7 @@ edgeforge-crowd = { path = "crates/edgeforge-crowd" }
 edgeforge-orchestration = { path = "crates/edgeforge-orchestration" }
 edgeforge-autonomic = { path = "crates/edgeforge-autonomic" }
 edgeforge-kpi = { path = "crates/edgeforge-kpi" }
+edgeforge-perf = { path = "crates/edgeforge-perf" }
 edgeforge-api = { path = "crates/edgeforge-api" }
 
 [profile.release]

@@ -1,0 +1,289 @@
+openapi: 3.1.0
+info:
+  title: EdgeForge API
+  version: 0.1.0
+  description: |
+    OpenAI-compatible local API for the EdgeForge runtime.
+    
+    Base URL: `http://127.0.0.1:11434/v1`
+    
+    Authentication: No API key required by default (localhost-only).
+    Set `api.require_api_key = true` in config to require a key.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://127.0.0.1:11434/v1
+    description: Local EdgeForge server
+
+paths:
+  /chat/completions:
+    post:
+      summary: Create chat completion
+      description: |
+        OpenAI-compatible chat completions endpoint. Supports both
+        streaming (SSE) and non-streaming responses.
+        
+        When `stream: true`, the response is `text/event-stream` with
+        `data: {chunk}\n\n` per token, ending with `data: [DONE]\n\n`.
+        
+        The `X-EdgeForge-Verification` header indicates the verification
+        status of each token (ADR-018):
+        - `verified` — verification passed within 50ms deadline
+        - `pending` — verification pending; correction may follow
+        - `corrected` — this chunk corrects a previously pending token
+      operationId: createChatCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream of chat completion chunks
+        '400':
+          description: Invalid request
+        '404':
+          description: Model not found
+        '429':
+          description: Rate limited
+        '501':
+          description: Not implemented
+
+  /completions:
+    post:
+      summary: Create text completion
+      description: Legacy text completion endpoint (not yet implemented).
+      operationId: createCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '501':
+          description: Not implemented
+
+  /embeddings:
+    post:
+      summary: Create embeddings
+      description: |
+        RAG embeddings endpoint (F-DEV-06). Requires the sqlite-vss
+        extension to be loaded.
+      operationId: createEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                input:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+      responses:
+        '200':
+          description: Successful response
+        '501':
+          description: Not implemented (sqlite-vss not loaded)
+
+  /models:
+    get:
+      summary: List models
+      description: Lists all imported models in the registry.
+      operationId: listModels
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsResponse'
+
+  /models/{model_id}:
+    get:
+      summary: Retrieve model
+      description: Gets information about a specific model.
+      operationId: retrieveModel
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ULID identifier of the model.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+        '404':
+          description: Model not found
+
+  /health:
+    get:
+      summary: Health check
+      description: Liveness probe. Returns server status and version.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: The ULID identifier of the model to use.
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        max_tokens:
+          type: integer
+          default: 512
+          minimum: 1
+        temperature:
+          type: number
+          default: 0.7
+          minimum: 0
+          maximum: 2
+        top_p:
+          type: number
+          default: 0.9
+          minimum: 0
+          maximum: 1
+        stream:
+          type: boolean
+          default: false
+          description: If true, response is SSE stream.
+        stop:
+          type: array
+          items:
+            type: string
+          description: Sequences that stop generation.
+        seed:
+          type: integer
+          nullable: true
+          description: Random seed for reproducibility.
+
+    ChatMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: chat.completion
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Choice'
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    Choice:
+      type: object
+      properties:
+        index:
+          type: integer
+        message:
+          $ref: '#/components/schemas/ChoiceMessage'
+        finish_reason:
+          type: string
+          nullable: true
+
+    ChoiceMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          example: assistant
+        content:
+          type: string
+
+    Usage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+
+    ModelsResponse:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelInfo'
+
+    ModelInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: model
+        created:
+          type: integer
+        owned_by:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string

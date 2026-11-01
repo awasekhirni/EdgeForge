@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 [dependencies]
 edgeforge-core.workspace = true
+edgeforge-observability.workspace = true
 edgeforge-graph.workspace = true
 async-trait.workspace = true
 tokio.workspace = true

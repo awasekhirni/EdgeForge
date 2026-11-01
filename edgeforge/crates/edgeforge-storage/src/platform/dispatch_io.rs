@@ -11,10 +11,12 @@ use crate::platform::{AlignedBuffer, DirectFile, IoError, PlatformIo, ReadReques
 use async_trait::async_trait;
 use std::path::Path;
 
+/// `DispatchIo` — see module documentation for purpose and usage.
 pub struct DispatchIo;
 
 impl DispatchIo {
     #[must_use]
+    /// Creates a new instance with default configuration.
     pub fn new() -> Self {
         Self
     }

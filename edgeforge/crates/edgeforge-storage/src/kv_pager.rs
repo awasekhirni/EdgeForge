@@ -1,10 +1,50 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! Paged KV cache (F-TIER-04, F-TIER-06).
+//! # Paged KV Cache with SSD Spill (F-TIER-04, F-TIER-06)
 //!
-//! Phase 4: implements real paged KV cache with LRU eviction. Hot pages
-//! (recent tokens) live in RAM; cold pages spill to SSD when the RAM budget
-//! is exceeded.
+//! ## Purpose
+//! The KV cache holds attention key/value tensors for previously generated
+//! tokens. At 100k-token context this is multi-gigabyte; we page it between
+//! RAM (hot, recent tokens) and SSD (cold, older tokens) using fixed-size pages.
+//!
+//! ## What This File Does
+//! - `KvPageId` — (LayerIdx, page index)
+//! - `KvPage` — resident page (id + bytes)
+//! - `KvPagerConfig` — ram_budget, page_size, ssd_dir
+//! - `KvCachePager` — thread-safe paged cache with LRU eviction
+//! - `get(id)` — cache lookup with LRU clock bump
+//! - `put(id, bytes)` — insert with automatic LRU eviction
+//! - `contains(id)` — check without LRU bump
+//! - `evict(id)` — manual eviction
+//! - `spill_to_ssd(id)` — write page to SSD file and evict from RAM
+//! - `load_from_ssd(id)` — read spilled page back into RAM
+//! - `get_or_load(id)` — check RAM → SSD → None
+//! - `hit_rate()` — cache hit rate in [0.0, 1.0]
+//! - `evictions()` — total eviction count
+//! - `current_bytes()` — current RAM usage
+//!
+//! ## Dependencies
+//! - `parking_lot::Mutex` — thread-safe interior mutability
+//! - `edgeforge_core::{Bytes, LayerIdx}`
+//! - `std::fs` — SSD spill file I/O
+//!
+//! ## Output
+//! `Option<Vec<u8>>` — Some on hit, None on miss (use get_or_load for SSD fallback).
+//!
+//! ## Function: spill_to_ssd
+//! - **Purpose:** Write a resident page to SSD and evict from RAM
+//! - **Parameters:** `KvPageId` — the page to spill
+//! - **Returns:** `Result<PathBuf, EdgeForgeError>` — path the page was spilled to
+//! - **Errors:** Engine error if page not resident; Io if write fails
+//! - **Side effects:** Page is removed from RAM; file written at `{ssd_dir}/kv_{layer}_{page}.bin`
+//! - **Dependencies:** `std::fs::write`
+//!
+//! ## Function: get_or_load
+//! - **Purpose:** Get a page, loading from SSD if not resident
+//! - **Parameters:** `KvPageId` — the page to get
+//! - **Returns:** `Option<Vec<u8>>` — Some if found in RAM or SSD, None if not spilled
+//! - **Fallback chain:** RAM cache → SSD spill file → None
+//! - **Dependencies:** `self.get()`, `self.load_from_ssd()`
 
 use edgeforge_core::{Bytes, LayerIdx};
 use parking_lot::Mutex;
@@ -67,6 +107,7 @@ struct CacheEntry {
 
 impl KvCachePager {
     #[must_use]
+    /// Creates a new instance with default configuration.
     pub fn new(config: KvPagerConfig) -> Self {
         Self {
             config,
@@ -235,6 +276,7 @@ impl KvCachePager {
     }
 
     #[must_use]
+    /// Returns `true` if `empty` is true.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

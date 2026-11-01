@@ -1,9 +1,44 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
-//! Router hook for SSD paging (F-SCHED-01).
+//! # Router Hook for SSD Paging (F-SCHED-01)
 //!
-//! Phase 5: implements `GraphAwareRouterHook` that queries the streaming
-//! graph for the lowest-latency expert source.
+//! ## Purpose
+//! The MoE router selects top-k experts per token. The router hook intercepts
+//! these selections and decides where each expert's weights are sourced from:
+//! RAM cache (fastest), local SSD, or a remote peer over the QUIC mesh.
+//!
+//! ## What This File Does
+//! - `ExpertResolution` — Ram, Ssd, Peer(NodeId), Surrogate
+//! - `RouterHook` trait — resolve_expert(layer, expert) -> ExpertResolution
+//! - `GraphAwareRouterHook` — production impl that queries the streaming graph
+//! - `SsdOnlyRouterHook` — always returns SSD (for testing/fallback)
+//! - `RamOnlyRouterHook` — always returns RAM (for warm-cache testing)
+//!
+//! ## Dependencies
+//! - `edgeforge-core::{Celsius, ExpertId, LayerIdx, NodeId}`
+//! - `edgeforge-graph::StreamingGraph` — for peer queries
+//! - `edgeforge-storage::{ExpertCache, ThermalState}` — for cache + thermal state
+//! - `parking_lot::RwLock` — for thermal state
+//!
+//! ## Output
+//! `ExpertResolution` — Ram, Ssd, Peer(NodeId), or Surrogate.
+//!
+//! ## Function: GraphAwareRouterHook::resolve_expert
+//! - **Purpose:** Decide where to fetch an expert's weights from
+//! - **Parameters:** `LayerIdx`, `ExpertId`
+//! - **Returns:** `ExpertResolution`
+//! - **Algorithm:**
+//!   1. Check RAM cache → hit: return Ram
+//!   2. If graph healthy, query best_peer_for_expert → if fetch_time < ssd_fetch_time: return Peer
+//!   3. If surrogate allowed: return Surrogate
+//!   4. Otherwise: return Ssd
+//! - **Dependencies:** `self.cache.get()`, `self.graph.best_peer_for_expert()`,
+//!   `self.thermal.try_read()`
+//! - **Fallback:** If graph is unhealthy, falls back to SSD (or Surrogate if allowed)
+//!
+//! ## Surrogate Gating
+//! Surrogate approximation is only allowed under Balanced/Fast presets.
+//! The Quality preset hard-disables it (R-19, accuracy SLA ≥99.9%).
 
 use edgeforge_core::{Celsius, ExpertId, LayerIdx, NodeId};
 use edgeforge_graph::StreamingGraph;
@@ -39,6 +74,7 @@ pub struct GraphAwareRouterHook {
 
 impl GraphAwareRouterHook {
     #[must_use]
+    /// Creates a new instance with default configuration.
     pub fn new(
         cache: Arc<ExpertCache>,
         graph: Arc<dyn StreamingGraph>,

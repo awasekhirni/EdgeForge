@@ -1,0 +1,41 @@
+# EdgeForge docker-compose — headless API server.
+#
+# Usage:
+#   docker-compose up -d
+#   curl http://127.0.0.1:11434/health
+#
+# The edgeforge-data volume persists the SQLite database and model files
+# across container restarts.
+
+version: "3.9"
+
+services:
+  edgeforge:
+    build: .
+    image: edgeforge:latest
+    container_name: edgeforge
+    ports:
+      - "11434:11434"
+    volumes:
+      - edgeforge-data:/data
+      - edgeforge-models:/models
+    environment:
+      - EDGEFORGE_DATA=/data
+      - RUST_LOG=info
+      # Override the listen address to accept external connections.
+      # Default is 127.0.0.1:11434 (localhost only).
+      # To allow external access, set:
+      # - EDGEFORGE_API__LISTEN_ADDR=0.0.0.0:11434
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:11434/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  edgeforge-data:
+    driver: local
+  edgeforge-models:
+    driver: local

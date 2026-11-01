@@ -1,17 +1,55 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Graph Core — In-Memory Graph Store (ADR-014)
+//!
+//! ## Purpose
+//! The actual data store for the streaming graph. Uses `dashmap` for
+//! concurrent node/edge access and `parking_lot` for the history writer lock.
+//! Single-writer (ingest task), many-reader (router hook, prefetcher).
+//!
+//! ## What This File Does
+//! - `GraphCore` — the graph store with peers, experts, history, health flag
+//! - `PeerEstimate` — peer ID + RTT + fetch time + has_expert_resident
+//! - `PeerNode` — full peer record (id, rtt, thermal, experts_resident, quality_score)
+//! - `ExpertKey` — (LayerIdx, ExpertId) for expert residency tracking
+//! - `ResidentLocation` — Ram, Ssd, or Peer(NodeId)
+//! - `best_peer_for_expert()` — finds best peer by residency + RTT + quality
+//! - `estimate_fetch_time()` — estimated fetch time in microseconds
+//! - `record_heartbeat()` — update peer info from heartbeat
+//! - `record_peer_lost()` — remove a peer
+//! - `record_router_decision()` — add to sequence history (H3 prediction source)
+//!
+//! ## Dependencies
+//! - `dashmap::DashMap` — concurrent hashmap for peers and experts
+//! - `parking_lot::RwLock` — for sequence history
+//! - `ahash::AHashMap` — fast hashmap for history
+//! - `std::sync::atomic` — AtomicBool, AtomicU64 for health and counters
+//!
+//! ## Output
+//! `Option<PeerEstimate>` — the best peer for a given (layer, expert), or None.
+//!
+//! ## Function: best_peer_for_expert
+//! - **Purpose:** Find the best peer to fetch an expert from
+//! - **Parameters:** `LayerIdx`, `ExpertId`, `Celsius` (thermal state)
+//! - **Returns:** `Option<PeerEstimate>` — best peer or None if graph unhealthy
+//! - **Selection criteria:** (1) peer has expert resident, (2) lowest RTT,
+//!   (3) quality_score >= 0.3
+//! - **Dependencies:** `self.healthy`, `self.peers`, `self.experts`
+
 use ahash::AHashMap;
 use dashmap::DashMap;
 use edgeforge_core::{Celsius, ExpertId, LayerIdx, NodeId};
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[derive(Clone, Copy, Debug)]
+/// `PeerEstimate` — see module documentation for purpose and usage.
 pub struct PeerEstimate {
     pub peer: NodeId,
     pub rtt_ms: u32,
     pub fetch_time_us: u64,
     pub has_expert_resident: bool,
 }
+/// `GraphCore` — see module documentation for purpose and usage.
 pub struct GraphCore {
     pub(crate) peers: DashMap<NodeId, PeerNode>,
     pub(crate) experts: DashMap<ExpertKey, ResidentLocation>,
@@ -21,11 +59,13 @@ pub struct GraphCore {
     pub(crate) events_dropped: AtomicU64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// `ExpertKey` — see module documentation for purpose and usage.
 pub struct ExpertKey {
     pub layer: LayerIdx,
     pub expert: ExpertId,
 }
 #[derive(Clone, Debug)]
+/// `PeerNode` — see module documentation for purpose and usage.
 pub struct PeerNode {
     pub id: NodeId,
     pub rtt_ms: u32,
@@ -35,12 +75,14 @@ pub struct PeerNode {
     pub quality_score: f32,
 }
 #[derive(Clone, Debug)]
+/// `ResidentLocation` enumeration — see module documentation for variants.
 pub enum ResidentLocation {
     Ram,
     Ssd,
     Peer(NodeId),
 }
 impl GraphCore {
+    /// Creates a new instance with default configuration.
     pub fn new() -> Self {
         Self {
             peers: DashMap::new(),
@@ -51,6 +93,7 @@ impl GraphCore {
             events_dropped: AtomicU64::new(0),
         }
     }
+    /// Best peer for expert — see module documentation for details.
     pub fn best_peer_for_expert(
         &self,
         layer: LayerIdx,
@@ -91,12 +134,14 @@ impl GraphCore {
         });
         candidates.into_iter().next()
     }
+    /// Estimate fetch time — see module documentation for details.
     pub fn estimate_fetch_time(&self, peer: NodeId, _expert: ExpertId) -> u64 {
         self.peers
             .get(&peer)
             .map(|p| u64::from(p.rtt_ms) * 1000)
             .unwrap_or(100_000)
     }
+    /// Records a peer heartbeat.
     pub fn record_heartbeat(
         &self,
         peer: NodeId,
@@ -117,9 +162,11 @@ impl GraphCore {
             },
         );
     }
+    /// Records that a peer was lost.
     pub fn record_peer_lost(&self, peer: NodeId) {
         self.peers.remove(&peer);
     }
+    /// Records a router decision in sequence history.
     pub fn record_router_decision(
         &self,
         seq: u64,
@@ -137,9 +184,11 @@ impl GraphCore {
             entry.drain(..d);
         }
     }
+    /// Returns `true` if `healthy` is true.
     pub fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::Relaxed)
     }
+    /// Sets the value of `healthy`.
     pub fn set_healthy(&self, h: bool) {
         self.healthy.store(h, Ordering::Relaxed);
     }

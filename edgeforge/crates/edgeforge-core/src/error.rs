@@ -1,9 +1,41 @@
 // Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
 // Author: Awase Khirni Syed
+//! # Error Taxonomy
+//!
+//! ## Purpose
+//! Defines the unified `EdgeForgeError` enum that all crates use for error
+//! handling. Every error variant maps to an HTTP status code for the API layer.
+//!
+//! ## What This File Does
+//! - Defines `EdgeForgeError` with variants for every layer (L1–L5)
+//! - Implements `thiserror::Error` for automatic `Display` and `From` impls
+//! - Provides `http_status()` for API middleware error → JSON mapping
+//!
+//! ## Dependencies
+//! - `thiserror` — for `#[derive(Error)]`
+//! - `std::path::PathBuf` — for I/O error paths
+//!
+//! ## Output
+//! `EdgeForgeError` enum with `http_status() -> u16` method.
+//!
+//! ## Error → HTTP Status Mapping
+//! | Variant | HTTP Status |
+//! |---|---|
+//! | InvalidRequest, InvalidPreset | 400 |
+//! | Unauthorized, MtlsHandshakeFailed | 401 |
+//! | RateLimited | 429 |
+//! | ModelNotFound, JobNotFound | 404 |
+//! | InvalidJobState | 409 |
+//! | LicenseForbidden | 403 |
+//! | NotImplemented | 501 |
+//! | Others | 500 |
+
 use std::path::PathBuf;
 use thiserror::Error;
+/// Type alias for `Result`.
 pub type Result<T, E = EdgeForgeError> = std::result::Result<T, E>;
 #[derive(Debug, Error)]
+/// `EdgeForgeError` enumeration — see module documentation for variants.
 pub enum EdgeForgeError {
     #[error("manifest signature invalid: {0}")]
     ManifestSignatureInvalid(String),
@@ -55,6 +87,7 @@ pub enum EdgeForgeError {
     NotImplemented(&'static str),
 }
 impl EdgeForgeError {
+    /// Http status — see module documentation for details.
     pub fn http_status(&self) -> u16 {
         match self {
             Self::InvalidRequest(_) | Self::InvalidPreset(_) => 400,

@@ -1,0 +1,2 @@
+cargo:rustc-cfg=llama_stub
+cargo:rerun-if-changed=wrapper.h

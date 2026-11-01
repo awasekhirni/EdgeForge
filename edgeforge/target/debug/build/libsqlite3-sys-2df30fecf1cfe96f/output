@@ -91,5 +91,5 @@ HOST_ARFLAGS = None
 ARFLAGS_x86_64_apple_darwin = None
 ARFLAGS_x86_64-apple-darwin = None
 cargo:rustc-link-lib=static=sqlite3
-cargo:rustc-link-search=native=/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase5-Final/edgeforge/target/debug/build/libsqlite3-sys-2df30fecf1cfe96f/out
-cargo:lib_dir=/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase5-Final/edgeforge/target/debug/build/libsqlite3-sys-2df30fecf1cfe96f/out
+cargo:rustc-link-search=native=/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase15-Final/edgeforge/target/debug/build/libsqlite3-sys-2df30fecf1cfe96f/out
+cargo:lib_dir=/Volumes/MachdbkpAwase/DevWorkspace/edgeforge/EdgeForge-Phase15-Final/edgeforge/target/debug/build/libsqlite3-sys-2df30fecf1cfe96f/out
