@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # VRAM Staging Tier (F-TIER-05)
 //!
 //! ## Purpose
@@ -94,12 +92,7 @@ impl VramTier {
     /// ## Function Logging
     /// `timestamp - edgeforge-storage - vram_tier.rs - VramTier::new - STATUS`
     pub fn new(config: VramTierConfig) -> Self {
-        let _guard = FunctionGuard::new(
-            &LOGGER,
-            "edgeforge-storage",
-            "vram_tier.rs",
-            "VramTier::new",
-        );
+        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "vram_tier.rs", "VramTier::new");
         Self {
             config,
             current_bytes: Mutex::new(0),
@@ -150,12 +143,7 @@ impl VramTier {
             )));
         }
         *current += bytes;
-        tracing::debug!(
-            staged = bytes,
-            total = *current,
-            budget = self.config.budget_bytes,
-            "VRAM staged"
-        );
+        tracing::debug!(staged = bytes, total = *current, budget = self.config.budget_bytes, "VRAM staged");
         guard.success();
         Ok(())
     }
@@ -186,12 +174,7 @@ impl VramTier {
     /// ## Function Logging
     /// `timestamp - edgeforge-storage - vram_tier.rs - current_bytes - STATUS`
     pub fn current_bytes(&self) -> u64 {
-        let _guard = FunctionGuard::new(
-            &LOGGER,
-            "edgeforge-storage",
-            "vram_tier.rs",
-            "current_bytes",
-        );
+        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "vram_tier.rs", "current_bytes");
         *self.current_bytes.lock().unwrap()
     }
 
@@ -203,15 +186,8 @@ impl VramTier {
     /// ## Function Logging
     /// `timestamp - edgeforge-storage - vram_tier.rs - available_bytes - STATUS`
     pub fn available_bytes(&self) -> u64 {
-        let _guard = FunctionGuard::new(
-            &LOGGER,
-            "edgeforge-storage",
-            "vram_tier.rs",
-            "available_bytes",
-        );
-        self.config
-            .budget_bytes
-            .saturating_sub(self.current_bytes())
+        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "vram_tier.rs", "available_bytes");
+        self.config.budget_bytes.saturating_sub(self.current_bytes())
     }
 
     /// Returns the VRAM backend.
@@ -236,12 +212,7 @@ impl VramTier {
 /// ## Function Logging
 /// `timestamp - edgeforge-storage - vram_tier.rs - detect_backend - STATUS`
 pub fn detect_backend() -> VramBackend {
-    let _guard = FunctionGuard::new(
-        &LOGGER,
-        "edgeforge-storage",
-        "vram_tier.rs",
-        "detect_backend",
-    );
+    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "vram_tier.rs", "detect_backend");
     #[cfg(target_os = "macos")]
     {
         if cfg!(target_arch = "aarch64") {

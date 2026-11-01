@@ -32,4 +32,7 @@ parking_lot.workspace = true
 
 [dev-dependencies]
 tempfile = "3.13"
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+sqlx = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+edgeforge-orchestration = { workspace = true }

@@ -1,14 +1,11 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
-
 //! # Orchestration Tests — edgeforge-orchestration
 //!
 //! Tests for: models CRUD, jobs queue, lifecycle, presets, scheduler, event_bus.
 
 #[cfg(test)]
 mod tests {
-    use edgeforge_core::{Precision, PrecisionPreset};
     use edgeforge_orchestration::*;
+    use edgeforge_core::{Precision, PrecisionPreset};
     use sqlx::sqlite::SqlitePoolOptions;
 
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,8 +13,7 @@ mod tests {
 
     async fn setup() -> sqlx::SqlitePool {
         let id = DB_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let db_path =
-            std::env::temp_dir().join(format!("edgeforge_test_{}_{}.db", std::process::id(), id));
+        let db_path = std::env::temp_dir().join(format!("edgeforge_test_{}_{}.db", std::process::id(), id));
         let _ = std::fs::remove_file(&db_path);
         let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
         let pool = SqlitePoolOptions::new()
@@ -39,15 +35,9 @@ mod tests {
     fn test_lifecycle_legal_transition() {
         let lc = lifecycle::ModelLifecycle::new();
         let id = edgeforge_core::ModelId::new();
-        assert!(lc
-            .transition(id, lifecycle::LifecycleState::Loading)
-            .is_ok());
-        assert!(lc
-            .transition(id, lifecycle::LifecycleState::Warming)
-            .is_ok());
-        assert!(lc
-            .transition(id, lifecycle::LifecycleState::Serving)
-            .is_ok());
+        assert!(lc.transition(id, lifecycle::LifecycleState::Loading).is_ok());
+        assert!(lc.transition(id, lifecycle::LifecycleState::Warming).is_ok());
+        assert!(lc.transition(id, lifecycle::LifecycleState::Serving).is_ok());
         assert_eq!(lc.state(id), lifecycle::LifecycleState::Serving);
     }
 
@@ -56,9 +46,7 @@ mod tests {
         let lc = lifecycle::ModelLifecycle::new();
         let id = edgeforge_core::ModelId::new();
         // Unloaded → Serving is not legal
-        assert!(lc
-            .transition(id, lifecycle::LifecycleState::Serving)
-            .is_err());
+        assert!(lc.transition(id, lifecycle::LifecycleState::Serving).is_err());
     }
 
     // ── Presets Tests ───────────────────────────────────────────────
@@ -174,35 +162,29 @@ mod tests {
         let pool = setup().await;
         // First insert a model (jobs reference models)
         let models = Models::new(pool.clone());
-        let model_id = models
-            .insert(&db::NewModelRow {
-                name: "Test".to_string(),
-                publisher: "test".to_string(),
-                license: "Apache-2.0".to_string(),
-                file_path: std::path::PathBuf::from("/tmp/test.gguf"),
-                file_size_bytes: 1024,
-                sha256: vec![0u8; 32],
-                precision: Precision::Fp16,
-                arch: db::ModelArch::Moe,
-                total_params: 1_000_000_000,
-                active_params: Some(50_000_000),
-                dense_core_bytes: 100_000_000,
-                expert_pool_bytes: 900_000_000,
-            })
-            .await
-            .unwrap();
+        let model_id = models.insert(&db::NewModelRow {
+            name: "Test".to_string(),
+            publisher: "test".to_string(),
+            license: "Apache-2.0".to_string(),
+            file_path: std::path::PathBuf::from("/tmp/test.gguf"),
+            file_size_bytes: 1024,
+            sha256: vec![0u8; 32],
+            precision: Precision::Fp16,
+            arch: db::ModelArch::Moe,
+            total_params: 1_000_000_000,
+            active_params: Some(50_000_000),
+            dense_core_bytes: 100_000_000,
+            expert_pool_bytes: 900_000_000,
+        }).await.unwrap();
 
         let jobs = Jobs::new(pool);
-        let job_id = jobs
-            .enqueue(jobs::EnqueueJob {
-                model_id,
-                prompt_hash: vec![0u8; 32],
-                preset: "quality".to_string(),
-                priority: JobPriority::Interactive,
-                params_json: "{}".to_string(),
-            })
-            .await
-            .unwrap();
+        let job_id = jobs.enqueue(jobs::EnqueueJob {
+            model_id,
+            prompt_hash: vec![0u8; 32],
+            preset: "quality".to_string(),
+            priority: JobPriority::Interactive,
+            params_json: "{}".to_string(),
+        }).await.unwrap();
 
         let picked = jobs.pick_next().await.unwrap().unwrap();
         assert_eq!(picked.id, job_id.to_string());

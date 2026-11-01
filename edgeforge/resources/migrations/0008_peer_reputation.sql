@@ -1,1 +1,3 @@
--- 0008_peer_reputation.sql\nCREATE TABLE peer_reputation (peer_id TEXT PRIMARY KEY REFERENCES pool_nodes(id) ON DELETE CASCADE, tier TEXT NOT NULL CHECK (tier IN ('trusted','cooperative','open')), success_count INTEGER NOT NULL DEFAULT 0, failure_count INTEGER NOT NULL DEFAULT 0, avg_latency_ms REAL NOT NULL DEFAULT 0, quality_score REAL NOT NULL DEFAULT 0.5, last_updated_at INTEGER NOT NULL);\n\n
+-- 0008_peer_reputation.sql
+CREATE TABLE peer_reputation (peer_id TEXT PRIMARY KEY REFERENCES pool_nodes(id) ON DELETE CASCADE, tier TEXT NOT NULL CHECK (tier IN ('trusted','cooperative','open')), success_count INTEGER NOT NULL DEFAULT 0, failure_count INTEGER NOT NULL DEFAULT 0, avg_latency_ms REAL NOT NULL DEFAULT 0, quality_score REAL NOT NULL DEFAULT 0.5, last_updated_at INTEGER NOT NULL);
+

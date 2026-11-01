@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 #![allow(unused_imports, unused_variables, dead_code)]
 //! # edgeforge-storage — L3 Storage Tier
 //!
@@ -36,9 +34,7 @@ pub mod vram_tier;
 pub mod wear;
 pub mod weight_pager;
 pub use expert_cache::{ExpertCache, ExpertCacheConfig};
+pub use platform::{AlignedBuffer, BlockingIo, DirectFile, IoError, PlatformIo, ReadRequest, ReadResult};
 #[cfg(target_os = "linux")]
 pub use platform::IoUring;
-pub use platform::{
-    AlignedBuffer, BlockingIo, DirectFile, IoError, PlatformIo, ReadRequest, ReadResult,
-};
 pub use thermal::{ThermalMonitor, ThermalPolicy, ThermalState};

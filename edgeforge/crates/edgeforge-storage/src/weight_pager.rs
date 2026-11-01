@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 #![allow(unused_imports, unused_variables)]
 //! # Weight Pager (F-TIER-01, F-TIER-02, F-TIER-05)
 //!
@@ -113,10 +111,7 @@ impl WeightPager {
         let file_guard = self.file.lock();
         let file = file_guard.as_ref().expect("file opened");
         let buf = self.io.read_at(file, offset, len).await?;
-        Ok(WeightPage {
-            id,
-            bytes: buf.data,
-        })
+        Ok(WeightPage { id, bytes: buf.data })
     }
 
     /// Page in a weight page for a specific (layer, expert) pair.
@@ -152,9 +147,10 @@ impl WeightPager {
 
         let mut pages = Vec::with_capacity(ids.len());
         for (i, id) in ids.iter().enumerate() {
-            let result = results.iter().find(|r| r.id == i as u64).ok_or_else(|| {
-                edgeforge_core::EdgeForgeError::Engine(format!("missing read result for page {i}"))
-            })?;
+            let result = results
+                .iter()
+                .find(|r| r.id == i as u64)
+                .ok_or_else(|| edgeforge_core::EdgeForgeError::Engine(format!("missing read result for page {i}")))?;
             pages.push(WeightPage {
                 id: *id,
                 bytes: result.buffer.data.clone(),
@@ -215,11 +211,7 @@ mod tests {
         std::fs::write(tmp.path(), &data).unwrap();
         let pager = make_pager(tmp.path().to_path_buf());
         let page = pager
-            .page_in(WeightPageId {
-                layer: LayerIdx(0),
-                expert: None,
-                page: 0,
-            })
+            .page_in(WeightPageId { layer: LayerIdx(0), expert: None, page: 0 })
             .await
             .unwrap();
         assert_eq!(page.bytes.len(), 4096);
@@ -234,15 +226,7 @@ mod tests {
         std::fs::write(tmp.path(), &data).unwrap();
         let pager = make_pager(tmp.path().to_path_buf());
         let page = pager
-            .page_in_at(
-                4096,
-                100,
-                WeightPageId {
-                    layer: LayerIdx(1),
-                    expert: None,
-                    page: 0,
-                },
-            )
+            .page_in_at(4096, 100, WeightPageId { layer: LayerIdx(1), expert: None, page: 0 })
             .await
             .unwrap();
         assert_eq!(page.bytes.len(), 100);
@@ -255,27 +239,13 @@ mod tests {
         std::fs::write(tmp.path(), &data).unwrap();
         let pager = make_pager(tmp.path().to_path_buf());
         let ids = vec![
-            WeightPageId {
-                layer: LayerIdx(0),
-                expert: None,
-                page: 0,
-            },
-            WeightPageId {
-                layer: LayerIdx(1),
-                expert: None,
-                page: 0,
-            },
-            WeightPageId {
-                layer: LayerIdx(2),
-                expert: None,
-                page: 0,
-            },
+            WeightPageId { layer: LayerIdx(0), expert: None, page: 0 },
+            WeightPageId { layer: LayerIdx(1), expert: None, page: 0 },
+            WeightPageId { layer: LayerIdx(2), expert: None, page: 0 },
         ];
         let pages = pager.page_in_batch(&ids).await.unwrap();
         assert_eq!(pages.len(), 3);
-        for page in &pages {
-            assert_eq!(page.bytes.len(), 4096);
-        }
+        for page in &pages { assert_eq!(page.bytes.len(), 4096); }
     }
 
     #[tokio::test]
@@ -284,15 +254,7 @@ mod tests {
         std::fs::write(tmp.path(), b"short").unwrap();
         let pager = make_pager(tmp.path().to_path_buf());
         let result = pager
-            .page_in_at(
-                1000,
-                10,
-                WeightPageId {
-                    layer: LayerIdx(0),
-                    expert: None,
-                    page: 0,
-                },
-            )
+            .page_in_at(1000, 10, WeightPageId { layer: LayerIdx(0), expert: None, page: 0 })
             .await;
         assert!(result.is_err());
     }
@@ -303,13 +265,7 @@ mod tests {
         std::fs::write(tmp.path(), b"hello world").unwrap();
         let pager = make_pager(tmp.path().to_path_buf());
         // Open the file first.
-        let _ = pager
-            .page_in(WeightPageId {
-                layer: LayerIdx(0),
-                expert: None,
-                page: 0,
-            })
-            .await;
+        let _ = pager.page_in(WeightPageId { layer: LayerIdx(0), expert: None, page: 0 }).await;
         // Prefetch should not panic.
         pager.prefetch_next_layer(LayerIdx(0)).await;
     }

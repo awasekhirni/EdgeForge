@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # edgeforge-observability — Tracing + Opt-In OTLP + Function Logger (ADR-012)
 //!
 //! ## Purpose

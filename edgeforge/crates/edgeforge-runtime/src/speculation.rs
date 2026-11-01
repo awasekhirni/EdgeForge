@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Multi-Horizon Speculation Engine (ADR-015, ADR-016)
 //!
 //! ## Purpose
@@ -65,12 +63,7 @@ pub enum SpeculationStrategy {
 /// The detected workload type (ADR-016).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkloadType {
-    Code,
-    Structured,
-    NaturalLanguage,
-    Mixed,
-}
+pub enum WorkloadType { Code, Structured, NaturalLanguage, Mixed }
 
 /// Speculation configuration.
 #[derive(Clone, Debug)]
@@ -135,17 +128,31 @@ pub fn strategy_for_workload(workload: WorkloadType) -> SpeculationStrategy {
 
 /// H1: predict the next layer's top-k experts from the router logits.
 ///
-/// Always on (all presets). Accuracy target: >90%.
-/// Returns the predicted expert IDs for layer N+1.
+/// ## Purpose
+/// Reads the router's softmax output (logits) and selects the top-k expert
+/// indices by logit value. This is the highest-accuracy predictor (>90%)
+/// because it directly reads the model's routing decision.
+///
+/// ## Parameters
+/// - `current_layer`: The current layer index (used for context, not computation).
+/// - `router_logits`: The router's logit output for each expert. Index = expert ID.
+/// - `top_k`: Number of top experts to select.
+///
+/// ## Returns
+/// `Vec<ExpertId>` — the top-k expert IDs, sorted by logit value (highest first).
+///
+/// ## Algorithm
+/// 1. Enumerate (index, logit) pairs
+/// 2. Sort by logit descending
+/// 3. Take the top-k indices
+/// 4. Convert to `ExpertId`
 #[must_use]
 pub fn h1_predict_next_layer_experts(
     _current_layer: LayerIdx,
-    _router_logits: &[f32],
+    router_logits: &[f32],
     top_k: usize,
 ) -> Vec<ExpertId> {
-    // Phase 5: return the top-k indices from the logits.
-    // In production, this reads the router's softmax output.
-    let mut indexed: Vec<(usize, f32)> = _router_logits
+    let mut indexed: Vec<(usize, f32)> = router_logits
         .iter()
         .enumerate()
         .map(|(i, &v)| (i, v))
@@ -160,15 +167,36 @@ pub fn h1_predict_next_layer_experts(
 
 /// H2: predict experts for layers N+2..N+d using a surrogate or draft model.
 ///
-/// Preset-gated: Quality = correctness-preserving only; Balanced/Fast = stall-free.
-/// Accuracy target: 60-85%.
+/// ## Purpose
+/// Takes the draft model's output (a list of expert IDs per future layer)
+/// and flattens it into a list of (LayerIdx, ExpertId) pairs for layers
+/// N+1 through N+depth. Accuracy target: 60-85%.
+///
+/// ## Parameters
+/// - `current_layer`: The current layer index N.
+/// - `depth`: How many future layers to predict (N+1 .. N+depth).
+/// - `draft_model_output`: The draft model's expert predictions per layer.
+///   `draft_model_output[0]` is for layer N+1, `[1]` for N+2, etc.
+///
+/// ## Returns
+/// `Vec<(LayerIdx, ExpertId)>` — predicted (layer, expert) pairs for future layers.
+///
+/// ## Algorithm
+/// 1. For each layer i in 0..depth:
+///    a. Compute the target layer: `current_layer + 1 + i`
+///    b. For each expert in `draft_model_output[i]`:
+///       - Push (target_layer, expert) to the result
+///
+/// ## Preset Gating
+/// - Quality preset: only correctness-preserving draft models are used
+/// - Balanced/Fast: stall-free draft models are used
+/// - The gating is handled by the caller (SpeculationEngine::predict)
 #[must_use]
 pub fn h2_predict_future_experts(
     current_layer: LayerIdx,
     depth: u32,
     draft_model_output: &[Vec<ExpertId>],
 ) -> Vec<(LayerIdx, ExpertId)> {
-    // Phase 5: return the union of draft predictions for the next `depth` layers.
     let mut result = Vec::new();
     for (i, experts) in draft_model_output.iter().take(depth as usize).enumerate() {
         let layer = LayerIdx(current_layer.0 + 1 + i as u32);
@@ -202,12 +230,8 @@ pub fn permit_surrogate(
     preset_quality: bool,
     surrogate_available: bool,
 ) -> bool {
-    if preset_quality {
-        return false;
-    } // Quality SLA enforced (R-19)
-    if !surrogate_available {
-        return false;
-    }
+    if preset_quality { return false; } // Quality SLA enforced (R-19)
+    if !surrogate_available { return false; }
     miss_confidence < 0.3
 }
 
@@ -222,9 +246,7 @@ pub struct SpeculationEngine {
 impl SpeculationEngine {
     #[must_use]
     /// Creates a new instance with default configuration.
-    pub fn new(config: SpeculationConfig) -> Self {
-        Self { config }
-    }
+    pub fn new(config: SpeculationConfig) -> Self { Self { config } }
 
     /// Run all enabled horizons and return the union of predicted experts.
     ///
@@ -327,6 +349,80 @@ mod tests {
     }
 
     #[test]
+    fn h1_predicts_all_when_top_k_exceeds_len() {
+        let logits = vec![0.1, 0.5];
+        let experts = h1_predict_next_layer_experts(LayerIdx(0), &logits, 10);
+        assert_eq!(experts.len(), 2);
+    }
+
+    #[test]
+    fn h1_predicts_empty_logits() {
+        let logits: Vec<f32> = vec![];
+        let experts = h1_predict_next_layer_experts(LayerIdx(0), &logits, 3);
+        assert!(experts.is_empty());
+    }
+
+    #[test]
+    fn h1_predicts_sorted_descending() {
+        let logits = vec![0.1, 0.9, 0.5, 0.3];
+        let experts = h1_predict_next_layer_experts(LayerIdx(0), &logits, 4);
+        // Should be sorted: 0.9 (idx 1), 0.5 (idx 2), 0.3 (idx 3), 0.1 (idx 0)
+        assert_eq!(experts[0], ExpertId(1));
+        assert_eq!(experts[1], ExpertId(2));
+        assert_eq!(experts[2], ExpertId(3));
+        assert_eq!(experts[3], ExpertId(0));
+    }
+
+    #[test]
+    fn h2_predicts_future_layers() {
+        let draft = vec![
+            vec![ExpertId(0), ExpertId(1)],
+            vec![ExpertId(2)],
+        ];
+        let result = h2_predict_future_experts(LayerIdx(5), 2, &draft);
+        assert_eq!(result.len(), 3);
+        // Layer 5+1=6: experts 0, 1
+        assert!(result.contains(&(LayerIdx(6), ExpertId(0))));
+        assert!(result.contains(&(LayerIdx(6), ExpertId(1))));
+        // Layer 5+2=7: expert 2
+        assert!(result.contains(&(LayerIdx(7), ExpertId(2))));
+    }
+
+    #[test]
+    fn h2_respects_depth_limit() {
+        let draft = vec![
+            vec![ExpertId(0)],
+            vec![ExpertId(1)],
+            vec![ExpertId(2)],
+        ];
+        // depth=2 → only first 2 layers
+        let result = h2_predict_future_experts(LayerIdx(0), 2, &draft);
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&(LayerIdx(1), ExpertId(0))));
+        assert!(result.contains(&(LayerIdx(2), ExpertId(1))));
+        // Layer 3 should NOT be present
+        assert!(!result.contains(&(LayerIdx(3), ExpertId(2))));
+    }
+
+    #[test]
+    fn h2_empty_draft_returns_empty() {
+        let draft: Vec<Vec<ExpertId>> = vec![];
+        let result = h2_predict_future_experts(LayerIdx(0), 3, &draft);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn h2_empty_layers_skipped() {
+        let draft = vec![
+            vec![],           // layer 1: no experts
+            vec![ExpertId(0)], // layer 2: 1 expert
+        ];
+        let result = h2_predict_future_experts(LayerIdx(0), 2, &draft);
+        assert_eq!(result.len(), 1);
+        assert!(result.contains(&(LayerIdx(2), ExpertId(0))));
+    }
+
+    #[test]
     fn speculation_engine_predicts_union() {
         let engine = SpeculationEngine::new(SpeculationConfig::default());
         let logits = vec![0.1, 0.9, 0.2];
@@ -343,10 +439,7 @@ mod tests {
         let draft = vec![vec![ExpertId(0)]]; // H2 also predicts expert 0
         let predictions = engine.predict(LayerIdx(0), &logits, 1, &draft, None, 0);
         // Expert 0 for the same layer should appear only once after dedup.
-        let count_layer1_expert0 = predictions
-            .iter()
-            .filter(|(l, e)| l.0 == 1 && e.0 == 0)
-            .count();
+        let count_layer1_expert0 = predictions.iter().filter(|(l, e)| l.0 == 1 && e.0 == 0).count();
         assert!(count_layer1_expert0 <= 1, "duplicates should be removed");
     }
 }

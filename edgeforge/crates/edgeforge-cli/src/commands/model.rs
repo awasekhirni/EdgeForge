@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # `edgeforge model list|import|verify`
 //!
 //! ## Purpose
@@ -39,9 +37,7 @@ pub async fn run(args: ModelArgs, cfg: Config) -> anyhow::Result<()> {
         .max_connections(4)
         .connect(&db_url)
         .await?;
-    sqlx::migrate!("../../resources/migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("../../resources/migrations").run(&pool).await?;
     let models = Models::new(pool);
 
     match args.command {
@@ -50,7 +46,10 @@ pub async fn run(args: ModelArgs, cfg: Config) -> anyhow::Result<()> {
             if rows.is_empty() {
                 println!("No models imported yet.");
             } else {
-                println!("{:-<80}", "");
+                println!(
+                    "{:-<80}",
+                    ""
+                );
                 println!(
                     "{:<26} {:<20} {:<10} {:>12}",
                     "ID", "NAME", "PRECISION", "SIZE (GiB)"
@@ -83,11 +82,7 @@ pub async fn run(args: ModelArgs, cfg: Config) -> anyhow::Result<()> {
 
             println!("Importing model: {file_name}");
             println!("  Path: {path}");
-            println!(
-                "  Size: {:.2} GiB ({} bytes)",
-                file_size as f64 / (1024.0 * 1024.0 * 1024.0),
-                file_size
-            );
+            println!("  Size: {:.2} GiB ({} bytes)", file_size as f64 / (1024.0 * 1024.0 * 1024.0), file_size);
 
             // Compute SHA-256 hash.
             println!("  Computing SHA-256 hash...");
@@ -134,10 +129,7 @@ pub async fn run(args: ModelArgs, cfg: Config) -> anyhow::Result<()> {
                     println!("  Publisher:  {}", r.publisher);
                     println!("  License:    {}", r.license);
                     println!("  Precision:  {}", r.precision);
-                    println!(
-                        "  Size:       {:.2} GiB",
-                        r.file_size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
-                    );
+                    println!("  Size:       {:.2} GiB", r.file_size_bytes as f64 / (1024.0 * 1024.0 * 1024.0));
                     println!("  Imported:   {}", r.imported_at);
                 }
                 None => {
@@ -225,5 +217,77 @@ fn detect_arch(filename: &str) -> ModelArch {
         ModelArch::Mamba
     } else {
         ModelArch::Dense
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_precision_q4() {
+        assert_eq!(detect_precision("model-Q4_K_M"), edgeforge_core::Precision::Q4);
+    }
+
+    #[test]
+    fn test_detect_precision_q8() {
+        assert_eq!(detect_precision("model-Q8_0"), edgeforge_core::Precision::Q8);
+    }
+
+    #[test]
+    fn test_detect_precision_q3() {
+        assert_eq!(detect_precision("model-Q3_K_S"), edgeforge_core::Precision::Q3);
+    }
+
+    #[test]
+    fn test_detect_precision_fp16() {
+        assert_eq!(detect_precision("model-FP16"), edgeforge_core::Precision::Fp16);
+    }
+
+    #[test]
+    fn test_detect_precision_bf16() {
+        assert_eq!(detect_precision("model-BF16"), edgeforge_core::Precision::Bf16);
+    }
+
+    #[test]
+    fn test_detect_precision_fp32() {
+        assert_eq!(detect_precision("model-FP32"), edgeforge_core::Precision::Fp32);
+    }
+
+    #[test]
+    fn test_detect_precision_default() {
+        assert_eq!(detect_precision("model-unknown"), edgeforge_core::Precision::Fp16);
+    }
+
+    #[test]
+    fn test_detect_precision_case_insensitive() {
+        assert_eq!(detect_precision("model-q4"), edgeforge_core::Precision::Q4);
+        assert_eq!(detect_precision("model-fp32"), edgeforge_core::Precision::Fp32);
+    }
+
+    #[test]
+    fn test_detect_arch_moe() {
+        assert_eq!(detect_arch("mixtral-8x7B"), ModelArch::Moe);
+        assert_eq!(detect_arch("deepseek-moe"), ModelArch::Moe);
+    }
+
+    #[test]
+    fn test_detect_arch_rwkv() {
+        assert_eq!(detect_arch("rwkv-7B"), ModelArch::Rwkv);
+    }
+
+    #[test]
+    fn test_detect_arch_mamba() {
+        assert_eq!(detect_arch("mamba-1.4B"), ModelArch::Mamba);
+    }
+
+    #[test]
+    fn test_detect_arch_default() {
+        assert_eq!(detect_arch("llama-7B"), ModelArch::Dense);
+    }
+
+    #[test]
+    fn test_detect_arch_case_insensitive() {
+        assert_eq!(detect_arch("MOE-model"), ModelArch::Moe);
     }
 }

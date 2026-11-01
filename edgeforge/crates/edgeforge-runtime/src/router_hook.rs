@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Router Hook for SSD Paging (F-SCHED-01)
 //!
 //! ## Purpose
@@ -82,13 +80,7 @@ impl GraphAwareRouterHook {
         ssd_fetch_time_us: u64,
         allow_surrogate: bool,
     ) -> Self {
-        Self {
-            cache,
-            graph,
-            thermal,
-            ssd_fetch_time_us,
-            allow_surrogate,
-        }
+        Self { cache, graph, thermal, ssd_fetch_time_us, allow_surrogate }
     }
 }
 
@@ -157,29 +149,11 @@ mod tests {
         struct UnhealthyGraph;
         #[async_trait::async_trait]
         impl StreamingGraph for UnhealthyGraph {
-            fn best_peer_for_expert(
-                &self,
-                _: LayerIdx,
-                _: ExpertId,
-                _: Celsius,
-            ) -> Option<edgeforge_graph::PeerEstimate> {
-                None
-            }
-            fn estimate_fetch_time(&self, _: NodeId, _: ExpertId) -> u64 {
-                0
-            }
-            fn predicted_expert_set(&self, _: u64, _: u32) -> Vec<(LayerIdx, ExpertId)> {
-                Vec::new()
-            }
-            fn ingest(
-                &self,
-                _: edgeforge_core::ControlEvent,
-            ) -> Result<(), edgeforge_graph::GraphError> {
-                Ok(())
-            }
-            fn healthy(&self) -> bool {
-                false
-            }
+            fn best_peer_for_expert(&self, _: LayerIdx, _: ExpertId, _: Celsius) -> Option<edgeforge_graph::PeerEstimate> { None }
+            fn estimate_fetch_time(&self, _: NodeId, _: ExpertId) -> u64 { 0 }
+            fn predicted_expert_set(&self, _: u64, _: u32) -> Vec<(LayerIdx, ExpertId)> { Vec::new() }
+            fn ingest(&self, _: edgeforge_core::ControlEvent) -> Result<(), edgeforge_graph::GraphError> { Ok(()) }
+            fn healthy(&self) -> bool { false }
         }
 
         let graph: Arc<dyn StreamingGraph> = Arc::new(UnhealthyGraph);
@@ -191,39 +165,27 @@ mod tests {
     #[test]
     fn ssd_only_hook_returns_ssd() {
         let hook = SsdOnlyRouterHook;
-        assert!(matches!(
-            hook.resolve_expert(LayerIdx(0), ExpertId(1)),
-            ExpertResolution::Ssd
-        ));
+        assert!(matches!(hook.resolve_expert(LayerIdx(0), ExpertId(1)), ExpertResolution::Ssd));
     }
 
     #[test]
     fn ram_only_hook_returns_ram() {
         let hook = RamOnlyRouterHook;
-        assert!(matches!(
-            hook.resolve_expert(LayerIdx(0), ExpertId(1)),
-            ExpertResolution::Ram
-        ));
+        assert!(matches!(hook.resolve_expert(LayerIdx(0), ExpertId(1)), ExpertResolution::Ram));
     }
 
     #[test]
     fn graph_aware_hook_falls_back_to_ssd_when_unhealthy() {
         let hook = make_test_hook(false);
         // Graph is unhealthy → should fall back to SSD.
-        assert!(matches!(
-            hook.resolve_expert(LayerIdx(0), ExpertId(1)),
-            ExpertResolution::Ssd
-        ));
+        assert!(matches!(hook.resolve_expert(LayerIdx(0), ExpertId(1)), ExpertResolution::Ssd));
     }
 
     #[test]
     fn graph_aware_hook_uses_surrogate_when_allowed() {
         let hook = make_test_hook(true);
         // Graph is unhealthy, surrogate allowed → should return Surrogate.
-        assert!(matches!(
-            hook.resolve_expert(LayerIdx(0), ExpertId(1)),
-            ExpertResolution::Surrogate
-        ));
+        assert!(matches!(hook.resolve_expert(LayerIdx(0), ExpertId(1)), ExpertResolution::Surrogate));
     }
 
     #[test]
@@ -231,17 +193,8 @@ mod tests {
         let hook = make_test_hook(false);
         // Insert into cache first.
         use edgeforge_storage::expert_cache::CacheKey;
-        hook.cache.put(
-            CacheKey {
-                layer: LayerIdx(0),
-                expert: ExpertId(1),
-            },
-            vec![0xFF; 16],
-        );
+        hook.cache.put(CacheKey { layer: LayerIdx(0), expert: ExpertId(1) }, vec![0xFF; 16]);
         // Should return Ram on hit.
-        assert!(matches!(
-            hook.resolve_expert(LayerIdx(0), ExpertId(1)),
-            ExpertResolution::Ram
-        ));
+        assert!(matches!(hook.resolve_expert(LayerIdx(0), ExpertId(1)), ExpertResolution::Ram));
     }
 }

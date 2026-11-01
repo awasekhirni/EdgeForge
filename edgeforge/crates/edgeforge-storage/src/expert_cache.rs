@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 #![allow(unused_imports, unused_variables)]
 //! # RAM-Resident LRU Expert Cache (F-TIER-01)
 //!
@@ -36,49 +34,18 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 #[derive(Clone, Debug)]
 /// `ExpertCacheConfig` — see module documentation for purpose and usage.
-pub struct ExpertCacheConfig {
-    pub ram_budget: Bytes,
-}
-impl Default for ExpertCacheConfig {
-    fn default() -> Self {
-        Self {
-            ram_budget: Bytes(1024 * 1024 * 1024),
-        }
-    }
-}
+pub struct ExpertCacheConfig { pub ram_budget: Bytes }
+impl Default for ExpertCacheConfig { fn default() -> Self { Self { ram_budget: Bytes(1024 * 1024 * 1024) } } }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// `CacheKey` — see module documentation for purpose and usage.
-pub struct CacheKey {
-    pub layer: LayerIdx,
-    pub expert: ExpertId,
-}
+pub struct CacheKey { pub layer: LayerIdx, pub expert: ExpertId }
 /// `ExpertCache` — see module documentation for purpose and usage.
-pub struct ExpertCache {
-    inner: Mutex<Inner>,
-    config: ExpertCacheConfig,
-}
-struct Inner {
-    entries: HashMap<CacheKey, CacheEntry>,
-    clock: u64,
-    current_bytes: u64,
-}
-#[derive(Clone)]
-struct CacheEntry {
-    bytes: Vec<u8>,
-    last_access: u64,
-}
+pub struct ExpertCache { inner: Mutex<Inner>, config: ExpertCacheConfig }
+struct Inner { entries: HashMap<CacheKey, CacheEntry>, clock: u64, current_bytes: u64 }
+#[derive(Clone)] struct CacheEntry { bytes: Vec<u8>, last_access: u64 }
 impl ExpertCache {
     /// Creates a new instance with default configuration.
-    pub fn new(config: ExpertCacheConfig) -> Self {
-        Self {
-            inner: Mutex::new(Inner {
-                entries: HashMap::new(),
-                clock: 0,
-                current_bytes: 0,
-            }),
-            config,
-        }
-    }
+    pub fn new(config: ExpertCacheConfig) -> Self { Self { inner: Mutex::new(Inner { entries: HashMap::new(), clock: 0, current_bytes: 0 }), config } }
     /// Retrieves an item from the cache.
     pub fn get(&self, key: CacheKey) -> Option<Vec<u8>> {
         let mut inner = self.inner.lock();
@@ -93,73 +60,36 @@ impl ExpertCache {
     pub fn put(&self, key: CacheKey, bytes: Vec<u8>) {
         let mut inner = self.inner.lock();
         let incoming = bytes.len() as u64;
-        if let Some(existing) = inner.entries.get(&key) {
-            inner.current_bytes -= existing.bytes.len() as u64;
-        }
+        if let Some(existing) = inner.entries.get(&key) { inner.current_bytes -= existing.bytes.len() as u64; }
         while inner.current_bytes + incoming > self.config.ram_budget.0 {
-            let lru_key = match inner
-                .entries
-                .iter()
-                .min_by_key(|(_, e)| e.last_access)
-                .map(|(k, _)| *k)
-            {
-                Some(k) => k,
-                None => break,
-            };
-            if let Some(v) = inner.entries.remove(&lru_key) {
-                inner.current_bytes -= v.bytes.len() as u64;
-            }
+            let lru_key = match inner.entries.iter().min_by_key(|(_, e)| e.last_access).map(|(k, _)| *k) { Some(k) => k, None => break };
+            if let Some(v) = inner.entries.remove(&lru_key) { inner.current_bytes -= v.bytes.len() as u64; }
         }
         inner.clock += 1;
         let now = inner.clock;
-        inner.entries.insert(
-            key,
-            CacheEntry {
-                bytes,
-                last_access: now,
-            },
-        );
+        inner.entries.insert(key, CacheEntry { bytes, last_access: now });
         inner.current_bytes += incoming;
     }
     /// Returns the current bytes resident in RAM.
-    pub fn current_bytes(&self) -> u64 {
-        self.inner.lock().current_bytes
-    }
+    pub fn current_bytes(&self) -> u64 { self.inner.lock().current_bytes }
     /// Returns the number of elements.
-    pub fn len(&self) -> usize {
-        self.inner.lock().entries.len()
-    }
+    pub fn len(&self) -> usize { self.inner.lock().entries.len() }
     /// Returns `true` if `empty` is true.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn key(l: u32, e: u32) -> CacheKey {
-        CacheKey {
-            layer: LayerIdx(l),
-            expert: ExpertId(e),
-        }
-    }
-    #[test]
-    fn put_and_get() {
-        let c = ExpertCache::new(ExpertCacheConfig {
-            ram_budget: Bytes(1024),
-        });
+    fn key(l: u32, e: u32) -> CacheKey { CacheKey { layer: LayerIdx(l), expert: ExpertId(e) } }
+    #[test] fn put_and_get() {
+        let c = ExpertCache::new(ExpertCacheConfig { ram_budget: Bytes(1024) });
         c.put(key(0, 1), vec![0xAB; 16]);
         assert_eq!(c.get(key(0, 1)), Some(vec![0xAB; 16]));
     }
-    #[test]
-    fn lru_eviction() {
-        let c = ExpertCache::new(ExpertCacheConfig {
-            ram_budget: Bytes(32),
-        });
-        c.put(key(0, 1), vec![0x01; 16]);
-        c.put(key(0, 2), vec![0x02; 16]);
-        let _ = c.get(key(0, 1));
-        c.put(key(0, 3), vec![0x03; 16]);
+    #[test] fn lru_eviction() {
+        let c = ExpertCache::new(ExpertCacheConfig { ram_budget: Bytes(32) });
+        c.put(key(0, 1), vec![0x01; 16]); c.put(key(0, 2), vec![0x02; 16]);
+        let _ = c.get(key(0, 1)); c.put(key(0, 3), vec![0x03; 16]);
         assert!(c.get(key(0, 2)).is_none());
     }
 }

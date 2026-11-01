@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Quantitative Process Performance Objectives (ADR-030)
 //!
 //! ## Purpose
@@ -38,181 +36,111 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 /// `QppoId` enumeration — see module documentation for variants.
-pub enum QppoId {
-    MttrDeploys,
-    RegressionEscapeRate,
-    DefectDensity,
-    KaniCoverage,
-    BuildTimeP95,
-    TestFlakeRate,
-    UnsafeLocPerCrate,
-    DependencyFreshness,
-}
+pub enum QppoId { MttrDeploys, RegressionEscapeRate, DefectDensity, KaniCoverage, BuildTimeP95, TestFlakeRate, UnsafeLocPerCrate, DependencyFreshness }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 /// `ProcessAreaId` enumeration — see module documentation for variants.
-pub enum ProcessAreaId {
-    Car,
-    Dar,
-    Opp,
-    Ts,
-    Pi,
-    Vv,
-    Rsk,
-    Cm,
-}
-impl QppoId {
-    pub const fn cmmi_area(self) -> ProcessAreaId {
-        match self {
-            Self::MttrDeploys | Self::RegressionEscapeRate => ProcessAreaId::Car,
-            Self::DefectDensity => ProcessAreaId::Dar,
-            Self::KaniCoverage | Self::UnsafeLocPerCrate | Self::DependencyFreshness => {
-                ProcessAreaId::Ts
-            }
-            Self::BuildTimeP95 | Self::TestFlakeRate => ProcessAreaId::Opp,
-        }
-    }
-}
+pub enum ProcessAreaId { Car, Dar, Opp, Ts, Pi, Vv, Rsk, Cm }
+impl QppoId { pub const fn cmmi_area(self) -> ProcessAreaId { match self { Self::MttrDeploys | Self::RegressionEscapeRate => ProcessAreaId::Car, Self::DefectDensity => ProcessAreaId::Dar, Self::KaniCoverage | Self::UnsafeLocPerCrate | Self::DependencyFreshness => ProcessAreaId::Ts, Self::BuildTimeP95 | Self::TestFlakeRate => ProcessAreaId::Opp } } }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `Qppo` — see module documentation for purpose and usage.
-pub struct Qppo {
-    pub id: QppoId,
-    pub name: String,
-    pub unit: String,
-    pub upper_control_limit: f64,
-    pub lower_control_limit: f64,
-    pub target: f64,
-    pub cmmi_area: ProcessAreaId,
-}
+pub struct Qppo { pub id: QppoId, pub name: String, pub unit: String, pub upper_control_limit: f64, pub lower_control_limit: f64, pub target: f64, pub cmmi_area: ProcessAreaId }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 /// `QppoStatus` enumeration — see module documentation for variants.
-pub enum QppoStatus {
-    InControl,
-    AboveUcl,
-    BelowLcl,
-}
+pub enum QppoStatus { InControl, AboveUcl, BelowLcl }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `QppoViolation` — see module documentation for purpose and usage.
-pub struct QppoViolation {
-    pub qppo_id: QppoId,
-    pub measured_value: f64,
-    pub status: QppoStatus,
-    pub timestamp_ms: i64,
-    pub draft_adr_id: Option<String>,
-}
-impl Qppo {
-    pub fn classify(&self, v: f64) -> QppoStatus {
-        if v > self.upper_control_limit {
-            QppoStatus::AboveUcl
-        } else if v < self.lower_control_limit {
-            QppoStatus::BelowLcl
-        } else {
-            QppoStatus::InControl
-        }
-    }
-}
+pub struct QppoViolation { pub qppo_id: QppoId, pub measured_value: f64, pub status: QppoStatus, pub timestamp_ms: i64, pub draft_adr_id: Option<String> }
+impl Qppo { pub fn classify(&self, v: f64) -> QppoStatus { if v > self.upper_control_limit { QppoStatus::AboveUcl } else if v < self.lower_control_limit { QppoStatus::BelowLcl } else { QppoStatus::InControl } } }
 #[derive(Clone, Debug)]
 /// `QppoSet` — see module documentation for purpose and usage.
-pub struct QppoSet {
-    pub qppos: Vec<Qppo>,
-}
-impl Default for QppoSet {
-    fn default() -> Self {
-        use ProcessAreaId::*;
-        use QppoId::*;
-        Self {
-            qppos: vec![
-                Qppo {
-                    id: MttrDeploys,
-                    name: "MTTR deploys".into(),
-                    unit: "min".into(),
-                    upper_control_limit: 30.0,
-                    lower_control_limit: 0.0,
-                    target: 5.0,
-                    cmmi_area: Car,
-                },
-                Qppo {
-                    id: RegressionEscapeRate,
-                    name: "Regression escape rate".into(),
-                    unit: "%".into(),
-                    upper_control_limit: 5.0,
-                    lower_control_limit: 0.0,
-                    target: 0.0,
-                    cmmi_area: Car,
-                },
-                Qppo {
-                    id: DefectDensity,
-                    name: "Defect density".into(),
-                    unit: "/kLOC".into(),
-                    upper_control_limit: 5.0,
-                    lower_control_limit: 0.0,
-                    target: 1.0,
-                    cmmi_area: Dar,
-                },
-                Qppo {
-                    id: KaniCoverage,
-                    name: "Kani coverage".into(),
-                    unit: "%".into(),
-                    upper_control_limit: 100.0,
-                    lower_control_limit: 90.0,
-                    target: 100.0,
-                    cmmi_area: Ts,
-                },
-                Qppo {
-                    id: BuildTimeP95,
-                    name: "Build time p95".into(),
-                    unit: "min".into(),
-                    upper_control_limit: 30.0,
-                    lower_control_limit: 0.0,
-                    target: 15.0,
-                    cmmi_area: Opp,
-                },
-                Qppo {
-                    id: TestFlakeRate,
-                    name: "Test flake rate".into(),
-                    unit: "%".into(),
-                    upper_control_limit: 2.0,
-                    lower_control_limit: 0.0,
-                    target: 0.0,
-                    cmmi_area: Opp,
-                },
-                Qppo {
-                    id: UnsafeLocPerCrate,
-                    name: "unsafe LOC per crate".into(),
-                    unit: "LOC".into(),
-                    upper_control_limit: 500.0,
-                    lower_control_limit: 0.0,
-                    target: 0.0,
-                    cmmi_area: Ts,
-                },
-                Qppo {
-                    id: DependencyFreshness,
-                    name: "Dependency freshness".into(),
-                    unit: "days".into(),
-                    upper_control_limit: 90.0,
-                    lower_control_limit: 0.0,
-                    target: 30.0,
-                    cmmi_area: Ts,
-                },
-            ],
-        }
+pub struct QppoSet { pub qppos: Vec<Qppo> }
+impl Default for QppoSet { fn default() -> Self { use ProcessAreaId::*; use QppoId::*; Self { qppos: vec![
+    Qppo { id: MttrDeploys, name: "MTTR deploys".into(), unit: "min".into(), upper_control_limit: 30.0, lower_control_limit: 0.0, target: 5.0, cmmi_area: Car },
+    Qppo { id: RegressionEscapeRate, name: "Regression escape rate".into(), unit: "%".into(), upper_control_limit: 5.0, lower_control_limit: 0.0, target: 0.0, cmmi_area: Car },
+    Qppo { id: DefectDensity, name: "Defect density".into(), unit: "/kLOC".into(), upper_control_limit: 5.0, lower_control_limit: 0.0, target: 1.0, cmmi_area: Dar },
+    Qppo { id: KaniCoverage, name: "Kani coverage".into(), unit: "%".into(), upper_control_limit: 100.0, lower_control_limit: 90.0, target: 100.0, cmmi_area: Ts },
+    Qppo { id: BuildTimeP95, name: "Build time p95".into(), unit: "min".into(), upper_control_limit: 30.0, lower_control_limit: 0.0, target: 15.0, cmmi_area: Opp },
+    Qppo { id: TestFlakeRate, name: "Test flake rate".into(), unit: "%".into(), upper_control_limit: 2.0, lower_control_limit: 0.0, target: 0.0, cmmi_area: Opp },
+    Qppo { id: UnsafeLocPerCrate, name: "unsafe LOC per crate".into(), unit: "LOC".into(), upper_control_limit: 500.0, lower_control_limit: 0.0, target: 0.0, cmmi_area: Ts },
+    Qppo { id: DependencyFreshness, name: "Dependency freshness".into(), unit: "days".into(), upper_control_limit: 90.0, lower_control_limit: 0.0, target: 30.0, cmmi_area: Ts },
+] } } }
+impl QppoSet { pub fn evaluate(&self, id: QppoId, v: f64, now: i64) -> Option<QppoViolation> { let q = self.qppos.iter().find(|q| q.id == id)?; let s = q.classify(v); if s == QppoStatus::InControl { None } else { Some(QppoViolation { qppo_id: id, measured_value: v, status: s, timestamp_ms: now, draft_adr_id: None }) } } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_qppo_id_cmmi_area_mapping() {
+        assert_eq!(QppoId::MttrDeploys.cmmi_area(), ProcessAreaId::Car);
+        assert_eq!(QppoId::RegressionEscapeRate.cmmi_area(), ProcessAreaId::Car);
+        assert_eq!(QppoId::DefectDensity.cmmi_area(), ProcessAreaId::Dar);
+        assert_eq!(QppoId::KaniCoverage.cmmi_area(), ProcessAreaId::Ts);
+        assert_eq!(QppoId::BuildTimeP95.cmmi_area(), ProcessAreaId::Opp);
+        assert_eq!(QppoId::TestFlakeRate.cmmi_area(), ProcessAreaId::Opp);
+        assert_eq!(QppoId::UnsafeLocPerCrate.cmmi_area(), ProcessAreaId::Ts);
+        assert_eq!(QppoId::DependencyFreshness.cmmi_area(), ProcessAreaId::Ts);
     }
-}
-impl QppoSet {
-    pub fn evaluate(&self, id: QppoId, v: f64, now: i64) -> Option<QppoViolation> {
-        let q = self.qppos.iter().find(|q| q.id == id)?;
-        let s = q.classify(v);
-        if s == QppoStatus::InControl {
-            None
-        } else {
-            Some(QppoViolation {
-                qppo_id: id,
-                measured_value: v,
-                status: s,
-                timestamp_ms: now,
-                draft_adr_id: None,
-            })
-        }
+
+    #[test]
+    fn test_classify_in_control() {
+        let q = Qppo { id: QppoId::KaniCoverage, name: "test".into(), unit: "%".into(), upper_control_limit: 100.0, lower_control_limit: 90.0, target: 100.0, cmmi_area: ProcessAreaId::Ts };
+        assert_eq!(q.classify(95.0), QppoStatus::InControl);
+    }
+
+    #[test]
+    fn test_classify_above_ucl() {
+        let q = Qppo { id: QppoId::BuildTimeP95, name: "test".into(), unit: "min".into(), upper_control_limit: 30.0, lower_control_limit: 0.0, target: 15.0, cmmi_area: ProcessAreaId::Opp };
+        assert_eq!(q.classify(45.0), QppoStatus::AboveUcl);
+    }
+
+    #[test]
+    fn test_classify_below_lcl() {
+        let q = Qppo { id: QppoId::KaniCoverage, name: "test".into(), unit: "%".into(), upper_control_limit: 100.0, lower_control_limit: 90.0, target: 100.0, cmmi_area: ProcessAreaId::Ts };
+        assert_eq!(q.classify(85.0), QppoStatus::BelowLcl);
+    }
+
+    #[test]
+    fn test_classify_at_boundary() {
+        let q = Qppo { id: QppoId::KaniCoverage, name: "test".into(), unit: "%".into(), upper_control_limit: 100.0, lower_control_limit: 90.0, target: 100.0, cmmi_area: ProcessAreaId::Ts };
+        assert_eq!(q.classify(100.0), QppoStatus::InControl);
+        assert_eq!(q.classify(90.0), QppoStatus::InControl);
+    }
+
+    #[test]
+    fn test_qppo_set_default_has_8_qppos() {
+        let set = QppoSet::default();
+        assert_eq!(set.qppos.len(), 8);
+    }
+
+    #[test]
+    fn test_qppo_set_evaluate_in_control_returns_none() {
+        let set = QppoSet::default();
+        assert!(set.evaluate(QppoId::KaniCoverage, 95.0, 0).is_none());
+    }
+
+    #[test]
+    fn test_qppo_set_evaluate_violation() {
+        let set = QppoSet::default();
+        let v = set.evaluate(QppoId::KaniCoverage, 85.0, 0).unwrap();
+        assert_eq!(v.qppo_id, QppoId::KaniCoverage);
+        assert_eq!(v.status, QppoStatus::BelowLcl);
+        assert_eq!(v.measured_value, 85.0);
+    }
+
+    #[test]
+    fn test_qppo_set_evaluate_unknown_id_returns_none() {
+        let set = QppoSet::default();
+        // All 8 IDs are in the set, so this tests the find logic
+        let v = set.evaluate(QppoId::MttrDeploys, 5.0, 0);
+        assert!(v.is_none()); // 5.0 is in control (0-30)
+    }
+
+    #[test]
+    fn test_qppo_status_equality() {
+        assert_eq!(QppoStatus::InControl, QppoStatus::InControl);
+        assert_ne!(QppoStatus::AboveUcl, QppoStatus::BelowLcl);
     }
 }

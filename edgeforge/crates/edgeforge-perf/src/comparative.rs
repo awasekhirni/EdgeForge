@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Comparative Benchmark Registry
 //!
 //! ## Purpose
@@ -190,7 +188,12 @@ impl ComparativeRegistry {
         platform_a: &PlatformId,
         platform_b: &PlatformId,
     ) -> Option<PerformanceComparison> {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "comparative.rs", "compare");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "comparative.rs",
+            "compare",
+        );
         let benchmarks = self.benchmarks.read();
         let bench_a = benchmarks.get(&(platform_a.signature.clone(), function_name.to_string()))?;
         let bench_b = benchmarks.get(&(platform_b.signature.clone(), function_name.to_string()))?;
@@ -247,8 +250,12 @@ impl ComparativeRegistry {
 
     /// Get all registered platform IDs.
     pub fn get_platforms(&self) -> Vec<PlatformId> {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-perf", "comparative.rs", "get_platforms");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "comparative.rs",
+            "get_platforms",
+        );
         self.benchmarks
             .read()
             .values()
@@ -260,9 +267,13 @@ impl ComparativeRegistry {
 
     /// Dump all benchmarks as JSON.
     pub fn dump_json(&self) -> String {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "comparative.rs", "dump_json");
-        let benchmarks: Vec<ComparativeBenchmark> =
-            self.benchmarks.read().values().cloned().collect();
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "comparative.rs",
+            "dump_json",
+        );
+        let benchmarks: Vec<ComparativeBenchmark> = self.benchmarks.read().values().cloned().collect();
         serde_json::to_string_pretty(&benchmarks).unwrap_or_else(|_| "[]".to_string())
     }
 }

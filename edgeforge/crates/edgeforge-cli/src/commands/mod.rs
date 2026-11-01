@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # CLI Subcommand Definitions
 //!
 //! ## Purpose
@@ -21,6 +19,7 @@
 pub mod bench;
 pub mod config_cmd;
 pub mod model;
+pub mod run;
 pub mod serve;
 
 use clap::{Args, Subcommand};
@@ -43,14 +42,8 @@ pub struct ModelArgs {
 /// `ModelCommand` enumeration — see module documentation for variants.
 pub enum ModelCommand {
     List,
-    Import {
-        #[arg(long)]
-        path: String,
-    },
-    Verify {
-        #[arg(long)]
-        id: String,
-    },
+    Import { #[arg(long)] path: String },
+    Verify { #[arg(long)] id: String },
 }
 
 #[derive(Args, Debug)]
@@ -62,6 +55,26 @@ pub struct BenchArgs {
     pub warmup: u32,
     #[arg(long, default_value = "256")]
     pub tokens: u32,
+}
+
+#[derive(Args, Debug)]
+/// `RunArgs` — arguments for one-shot inference.
+pub struct RunArgs {
+    /// The model ID to use for inference.
+    #[arg(long)]
+    pub model: String,
+    /// The prompt text.
+    #[arg(long)]
+    pub prompt: String,
+    /// Maximum tokens to generate.
+    #[arg(long, default_value = "128")]
+    pub max_tokens: u32,
+    /// Sampling temperature.
+    #[arg(long, default_value = "0.7")]
+    pub temperature: f32,
+    /// Optional random seed for deterministic generation.
+    #[arg(long)]
+    pub seed: Option<u64>,
 }
 
 #[derive(Args, Debug)]

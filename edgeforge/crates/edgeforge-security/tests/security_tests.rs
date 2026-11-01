@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Security Tests — edgeforge-security
 //!
 //! Tests for: SHA-256 hash verification, manifest signature verification,
@@ -7,8 +5,8 @@
 
 #[cfg(test)]
 mod tests {
-    use edgeforge_core::{ModelId, Precision};
     use edgeforge_security::*;
+    use edgeforge_core::{ModelId, Precision};
     use tempfile::NamedTempFile;
 
     // ── Hash Tests ──────────────────────────────────────────────────
@@ -18,11 +16,9 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         tokio::fs::write(tmp.path(), b"hello world").await.unwrap();
         // SHA-256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
-        let expected: [u8; 32] =
-            hex::decode("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
-                .unwrap()
-                .try_into()
-                .unwrap();
+        let expected: [u8; 32] = hex::decode(
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        ).unwrap().try_into().unwrap();
         assert!(hash::verify_file_sha256(tmp.path(), expected).await.is_ok());
     }
 

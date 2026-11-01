@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Function Call Logger
 //!
 //! ## Purpose
@@ -329,14 +327,7 @@ impl<'a> FunctionGuard<'a> {
         file_name: &'static str,
         function_name: &'static str,
     ) -> Self {
-        logger.log(
-            crate_name,
-            file_name,
-            function_name,
-            CallStatus::Entry,
-            0,
-            None,
-        );
+        logger.log(crate_name, file_name, function_name, CallStatus::Entry, 0, None);
         Self {
             logger,
             crate_name,
@@ -425,22 +416,8 @@ mod tests {
     #[test]
     fn test_function_logger_log_and_dump() {
         let logger = FunctionLogger::with_capacity(100);
-        logger.log(
-            "test-crate",
-            "test.rs",
-            "test_fn",
-            CallStatus::Entry,
-            0,
-            None,
-        );
-        logger.log(
-            "test-crate",
-            "test.rs",
-            "test_fn",
-            CallStatus::Success,
-            42,
-            None,
-        );
+        logger.log("test-crate", "test.rs", "test_fn", CallStatus::Entry, 0, None);
+        logger.log("test-crate", "test.rs", "test_fn", CallStatus::Success, 42, None);
 
         let logs = logger.dump_logs();
         assert_eq!(logs.len(), 2);
@@ -484,10 +461,7 @@ mod tests {
         let logs = logger.dump_logs();
         assert_eq!(logs.len(), 2);
         assert_eq!(logs[1].status, CallStatus::Error);
-        assert_eq!(
-            logs[1].error_message.as_deref(),
-            Some("something went wrong")
-        );
+        assert_eq!(logs[1].error_message.as_deref(), Some("something went wrong"));
     }
 
     #[test]
@@ -515,14 +489,8 @@ mod tests {
         logger.log("c", "f.rs", "fn", CallStatus::Entry, 0, None);
         let json = logger.dump_json();
         // Check that the JSON contains the expected fields.
-        assert!(
-            json.contains("crate_name"),
-            "JSON should contain crate_name: {json}"
-        );
-        assert!(
-            json.contains("status"),
-            "JSON should contain status: {json}"
-        );
+        assert!(json.contains("crate_name"), "JSON should contain crate_name: {json}");
+        assert!(json.contains("status"), "JSON should contain status: {json}");
     }
 
     #[test]

@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Priority Lanes: Interactive vs Batch (F-SCHED-04)
 //!
 //! ## Purpose

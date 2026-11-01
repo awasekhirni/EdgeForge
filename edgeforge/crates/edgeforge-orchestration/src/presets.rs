@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Preset Resolver (F-UX-04)
 //!
 //! ## Purpose
@@ -28,45 +26,61 @@
 use edgeforge_core::{Precision, PrecisionPreset};
 #[derive(Clone, Debug)]
 /// `ResolvedPreset` — see module documentation for purpose and usage.
-pub struct ResolvedPreset {
-    pub name: PrecisionPreset,
-    pub precision: Precision,
-    pub prefetch_depth_layers: u32,
-    pub kv_cache_budget_gib: u64,
-}
+pub struct ResolvedPreset { pub name: PrecisionPreset, pub precision: Precision, pub prefetch_depth_layers: u32, pub kv_cache_budget_gib: u64 }
 /// Resolve — see module documentation for details.
-pub fn resolve(p: PrecisionPreset) -> ResolvedPreset {
-    match p {
-        PrecisionPreset::Quality => ResolvedPreset {
-            name: p,
-            precision: Precision::Fp16,
-            prefetch_depth_layers: 1,
-            kv_cache_budget_gib: 8,
-        },
-        PrecisionPreset::Balanced => ResolvedPreset {
-            name: p,
-            precision: Precision::Q8,
-            prefetch_depth_layers: 1,
-            kv_cache_budget_gib: 6,
-        },
-        PrecisionPreset::Fast => ResolvedPreset {
-            name: p,
-            precision: Precision::Q4,
-            prefetch_depth_layers: 2,
-            kv_cache_budget_gib: 4,
-        },
-        PrecisionPreset::MaxQuality => ResolvedPreset {
-            name: p,
-            precision: Precision::Fp32,
-            prefetch_depth_layers: 0,
-            kv_cache_budget_gib: 16,
-        },
-    }
-}
+pub fn resolve(p: PrecisionPreset) -> ResolvedPreset { match p { PrecisionPreset::Quality => ResolvedPreset { name: p, precision: Precision::Fp16, prefetch_depth_layers: 1, kv_cache_budget_gib: 8 }, PrecisionPreset::Balanced => ResolvedPreset { name: p, precision: Precision::Q8, prefetch_depth_layers: 1, kv_cache_budget_gib: 6 }, PrecisionPreset::Fast => ResolvedPreset { name: p, precision: Precision::Q4, prefetch_depth_layers: 2, kv_cache_budget_gib: 4 }, PrecisionPreset::MaxQuality => ResolvedPreset { name: p, precision: Precision::Fp32, prefetch_depth_layers: 0, kv_cache_budget_gib: 16 } } }
 /// `PresetResolver` — see module documentation for purpose and usage.
 pub struct PresetResolver;
-impl PresetResolver {
-    pub fn resolve(p: PrecisionPreset) -> ResolvedPreset {
-        resolve(p)
+impl PresetResolver { pub fn resolve(p: PrecisionPreset) -> ResolvedPreset { resolve(p) } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quality_preset() {
+        let r = resolve(PrecisionPreset::Quality);
+        assert_eq!(r.precision, Precision::Fp16);
+        assert_eq!(r.prefetch_depth_layers, 1);
+        assert_eq!(r.kv_cache_budget_gib, 8);
+    }
+
+    #[test]
+    fn test_balanced_preset() {
+        let r = resolve(PrecisionPreset::Balanced);
+        assert_eq!(r.precision, Precision::Q8);
+        assert_eq!(r.prefetch_depth_layers, 1);
+        assert_eq!(r.kv_cache_budget_gib, 6);
+    }
+
+    #[test]
+    fn test_fast_preset() {
+        let r = resolve(PrecisionPreset::Fast);
+        assert_eq!(r.precision, Precision::Q4);
+        assert_eq!(r.prefetch_depth_layers, 2);
+        assert_eq!(r.kv_cache_budget_gib, 4);
+    }
+
+    #[test]
+    fn test_max_quality_preset() {
+        let r = resolve(PrecisionPreset::MaxQuality);
+        assert_eq!(r.precision, Precision::Fp32);
+        assert_eq!(r.prefetch_depth_layers, 0);
+        assert_eq!(r.kv_cache_budget_gib, 16);
+    }
+
+    #[test]
+    fn test_preset_resolver_facade() {
+        let r = PresetResolver::resolve(PrecisionPreset::Quality);
+        assert_eq!(r.precision, Precision::Fp16);
+    }
+
+    #[test]
+    fn test_all_presets_have_valid_precision() {
+        for p in [PrecisionPreset::Quality, PrecisionPreset::Balanced, PrecisionPreset::Fast, PrecisionPreset::MaxQuality] {
+            let r = resolve(p);
+            // bytes_per_param should be > 0 for all precisions
+            assert!(r.precision.bytes_per_param() > 0.0);
+        }
     }
 }

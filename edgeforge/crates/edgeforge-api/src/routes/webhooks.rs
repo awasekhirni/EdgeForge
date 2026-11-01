@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # POST /v1/webhooks — Signed Webhook Registration (F-DEV-05)
 //!
 //! ## Purpose
@@ -29,7 +27,7 @@
 //! ## Function Logging
 //! `timestamp - edgeforge-api - webhooks.rs - function - STATUS`
 
-use crate::{middleware::ApiError, state::AppState};
+use crate::{middleware::ApiError, state::{AppState, StoredWebhook}};
 use axum::{
     extract::State,
     routing::{get, post},
@@ -97,12 +95,7 @@ pub struct WebhookResponse {
 /// ## Function Logging
 /// `timestamp - edgeforge-api - webhooks.rs - generate_webhook_secret - STATUS`
 pub fn generate_webhook_secret() -> String {
-    let _guard = FunctionGuard::new(
-        &LOGGER,
-        "edgeforge-api",
-        "webhooks.rs",
-        "generate_webhook_secret",
-    );
+    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "webhooks.rs", "generate_webhook_secret");
     use ring::rand::SecureRandom;
     let rng = ring::rand::SystemRandom::new();
     let mut bytes = [0u8; 32];
@@ -143,47 +136,49 @@ pub fn routes() -> Router<AppState> {
 /// ## Function Logging
 /// `timestamp - edgeforge-api - webhooks.rs - register_webhook - STATUS`
 async fn register_webhook(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<WebhookRegistration>,
 ) -> Result<Json<WebhookResponse>, ApiError> {
     let mut guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "webhooks.rs", "register_webhook");
 
     if req.url.is_empty() {
         guard.error("empty webhook URL");
-        return Err(
-            EdgeForgeError::InvalidRequest("webhook URL cannot be empty".to_string()).into(),
-        );
+        return Err(EdgeForgeError::InvalidRequest("webhook URL cannot be empty".to_string()).into());
     }
 
     if req.events.is_empty() {
         guard.error("no events specified");
-        return Err(EdgeForgeError::InvalidRequest(
-            "at least one event must be specified".to_string(),
-        )
-        .into());
+        return Err(EdgeForgeError::InvalidRequest("at least one event must be specified".to_string()).into());
     }
 
     let secret = generate_webhook_secret();
+    let webhook_id = format!("whk-{}", edgeforge_core::ModelId::new());
+    let created_at = chrono::Utc::now().timestamp_millis();
     let events: Vec<String> = req
         .events
         .iter()
-        .map(|e| {
-            serde_json::to_string(e)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string()
-        })
+        .map(|e| serde_json::to_string(e).unwrap_or_default().trim_matches('"').to_string())
         .collect();
 
+    // Store the webhook in the in-memory store.
+    let stored = StoredWebhook {
+        id: webhook_id.clone(),
+        url: req.url.clone(),
+        events: events.clone(),
+        secret: secret.clone(),
+        created_at,
+    };
+    state.webhooks.add(stored);
+
     let response = WebhookResponse {
-        id: format!("whk-{}", edgeforge_core::ModelId::new()),
+        id: webhook_id,
         url: req.url,
         events,
         secret,
-        created_at: chrono::Utc::now().timestamp_millis(),
+        created_at,
     };
 
-    tracing::info!(webhook_id = %response.id, "Webhook registered");
+    tracing::info!(webhook_id = %response.id, webhook_count = state.webhooks.len(), "Webhook registered");
     guard.success();
     Ok(Json(response))
 }
@@ -191,24 +186,34 @@ async fn register_webhook(
 /// Handler for GET /v1/webhooks (list registered webhooks).
 ///
 /// ## Purpose
-/// Returns a list of all registered webhooks. Phase 11: returns an empty list
-/// (webhooks are not yet persisted).
+/// Returns a list of all registered webhooks from the in-memory store.
+/// Webhooks are persisted for the lifetime of the server process (they are
+/// not persisted to disk — restart clears the store).
 ///
 /// ## Parameters
-/// - `state`: The application state.
+/// - `state`: The application state (contains the webhook store).
 ///
 /// ## Returns
 /// `Json<Vec<WebhookResponse>>` — list of registered webhooks.
 ///
 /// ## Function Logging
 /// `timestamp - edgeforge-api - webhooks.rs - list_webhooks - STATUS`
-async fn list_webhooks(
-    State(_state): State<AppState>,
-) -> Result<Json<Vec<WebhookResponse>>, ApiError> {
-    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "webhooks.rs", "list_webhooks");
-    // Phase 11: return empty list (webhooks are not yet persisted).
-    // Phase 12+: query from SQLite.
-    Ok(Json(Vec::new()))
+async fn list_webhooks(State(state): State<AppState>) -> Result<Json<Vec<WebhookResponse>>, ApiError> {
+    let guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "webhooks.rs", "list_webhooks");
+    let stored = state.webhooks.list();
+    let responses: Vec<WebhookResponse> = stored
+        .into_iter()
+        .map(|w| WebhookResponse {
+            id: w.id,
+            url: w.url,
+            events: w.events,
+            secret: w.secret,
+            created_at: w.created_at,
+        })
+        .collect();
+    tracing::info!(webhook_count = responses.len(), "list_webhooks: returning registered webhooks");
+    drop(guard);
+    Ok(Json(responses))
 }
 
 #[cfg(test)]
@@ -229,8 +234,7 @@ mod tests {
 
     #[test]
     fn test_webhook_registration_deserialize() {
-        let json =
-            r#"{"url":"https://example.com/webhook","events":["job_completed","job_failed"]}"#;
+        let json = r#"{"url":"https://example.com/webhook","events":["job_completed","job_failed"]}"#;
         let req: WebhookRegistration = serde_json::from_str(json).unwrap();
         assert_eq!(req.url, "https://example.com/webhook");
         assert_eq!(req.events.len(), 2);

@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Token-Bucket Rate Limiting Middleware
 //!
 //! ## Purpose
@@ -10,13 +8,22 @@
 //! - `RateLimiter` — thread-safe token-bucket rate limiter
 //! - `RateLimiter::new()` — create with capacity and refill rate
 //! - `RateLimiter::check()` — check if a request is allowed
-//! - `rate_limit_middleware()` — axum middleware function
+//! - `rate_limit_middleware()` — axum middleware function (reads `RateLimiter`
+//!   from `AppState` via the `State` extractor)
+//! - `rate_limit_middleware_with_limiter()` — original version that takes the
+//!   limiter directly (kept for backward compatibility + direct testing)
+//!
+//! ## Wiring
+//! This middleware is wired into the router by `server::build_router` via
+//! `axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware)`.
+//! It runs **before** auth and **before** the route handlers.
 //!
 //! ## Dependencies
 //! - `axum` — middleware extraction
 //! - `edgeforge-observability` — FunctionGuard for call logging
 //! - `parking_lot` — thread-safe state
 //! - `std::time::Instant` — timing
+//! - `crate::state::AppState` — for reading the shared RateLimiter
 //!
 //! ## Output
 //! Passes the request through if allowed, returns 429 if rate limited.
@@ -25,7 +32,7 @@
 //! `timestamp - edgeforge-api - rate_limit.rs - function - STATUS`
 
 use axum::{
-    extract::{ConnectInfo, Request},
+    extract::{ConnectInfo, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -34,8 +41,10 @@ use edgeforge_observability::function_logger::{FunctionGuard, FunctionLogger};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
+
+use crate::state::AppState;
 
 /// Global logger reference for this module.
 static LOGGER: LazyLock<FunctionLogger> = LazyLock::new(FunctionLogger::new);
@@ -93,9 +102,6 @@ impl RateLimiter {
     ///
     /// ## Returns
     /// A new `RateLimiter` instance.
-    ///
-    /// ## Function Logging
-    /// `timestamp - edgeforge-api - rate_limit.rs - RateLimiter::new - STATUS`
     pub fn new(capacity: u32, refill_per_minute: u32) -> Self {
         let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "RateLimiter::new");
         Self {
@@ -116,13 +122,12 @@ impl RateLimiter {
     ///
     /// ## Returns
     /// `true` if the request is allowed, `false` if rate-limited.
-    ///
-    /// ## Function Logging
-    /// `timestamp - edgeforge-api - rate_limit.rs - check - STATUS`
     pub fn check(&self, ip: &str) -> bool {
         let mut guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "check");
         let mut buckets = self.buckets.lock();
-        let bucket = buckets.entry(ip.to_string()).or_insert_with(|| TokenBucket::new(self.capacity));
+        let bucket = buckets
+            .entry(ip.to_string())
+            .or_insert_with(|| TokenBucket::new(self.capacity));
         bucket.refill(self.capacity, self.refill_per_second);
         let allowed = bucket.try_consume(1.0);
         if !allowed {
@@ -141,9 +146,12 @@ impl RateLimiter {
     /// ## Returns
     /// The number of available tokens (0.0 if IP not tracked).
     pub fn available_tokens(&self, ip: &str) -> f64 {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "available_tokens");
+        let _guard =
+            FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "available_tokens");
         let mut buckets = self.buckets.lock();
-        let bucket = buckets.entry(ip.to_string()).or_insert_with(|| TokenBucket::new(self.capacity));
+        let bucket = buckets
+            .entry(ip.to_string())
+            .or_insert_with(|| TokenBucket::new(self.capacity));
         bucket.refill(self.capacity, self.refill_per_second);
         bucket.tokens
     }
@@ -153,31 +161,78 @@ impl RateLimiter {
         let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "clear");
         self.buckets.lock().clear();
     }
+
+    /// Returns the number of tracked IPs.
+    pub fn tracked_ip_count(&self) -> usize {
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-api",
+            "rate_limit.rs",
+            "tracked_ip_count",
+        );
+        self.buckets.lock().len()
+    }
 }
 
-/// Axum middleware: enforce per-IP rate limiting.
+/// Axum middleware: enforce per-IP rate limiting (stateful, reads from AppState).
 ///
 /// ## Purpose
-/// Checks the client's IP against the rate limiter. If the rate limit is
-/// exceeded, returns 429 Too Many Requests.
+/// Reads the shared `RateLimiter` from `AppState`. Checks the client's IP
+/// against the limiter. If the rate limit is exceeded, returns 429 Too Many
+/// Requests.
 ///
 /// ## Parameters
-/// - `limiter`: The rate limiter instance.
+/// - `state`: The application state (contains the shared `RateLimiter`).
+/// - `ConnectInfo(addr)`: The client's socket address (injected by axum's
+///   `into_make_service_with_connect_info`).
 /// - `req`: The incoming request.
 /// - `next`: The next middleware/handler in the chain.
 ///
 /// ## Returns
 /// The response from the next handler, or 429 if rate-limited.
 ///
-/// ## Function Logging
-/// `timestamp - edgeforge-api - rate_limit.rs - rate_limit_middleware - STATUS`
+/// ## Wiring
+/// Wired via `axum::middleware::from_fn_with_state(state, rate_limit_middleware)`.
 pub async fn rate_limit_middleware(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let mut guard =
+        FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "rate_limit_middleware");
+    let ip = addr.ip().to_string();
+    if !state.rate_limiter.check(&ip) {
+        guard.error(&format!("rate limited for IP {ip}"));
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    guard.success();
+    next.run(req).await
+}
+
+/// Axum middleware: enforce per-IP rate limiting with a directly-passed limiter.
+///
+/// ## Purpose
+/// Original version that takes the `RateLimiter` as a direct argument. Used
+/// by tests that want to bypass AppState.
+///
+/// ## Parameters
+/// - `limiter`: The rate limiter instance.
+/// - `ConnectInfo(addr)`: The client's socket address.
+/// - `req`: The incoming request.
+/// - `next`: The next middleware/handler in the chain.
+pub async fn rate_limit_middleware_with_limiter(
     limiter: Arc<RateLimiter>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request,
     next: Next,
 ) -> Response {
-    let mut guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "rate_limit.rs", "rate_limit_middleware");
+    let mut guard = FunctionGuard::new(
+        &LOGGER,
+        "edgeforge-api",
+        "rate_limit.rs",
+        "rate_limit_middleware_with_limiter",
+    );
     let ip = addr.ip().to_string();
     if !limiter.check(&ip) {
         guard.error(&format!("rate limited for IP {ip}"));
@@ -186,8 +241,6 @@ pub async fn rate_limit_middleware(
     guard.success();
     next.run(req).await
 }
-
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests {
@@ -242,5 +295,24 @@ mod tests {
         assert!(!limiter.check("127.0.0.1"));
         limiter.clear();
         assert!(limiter.check("127.0.0.1")); // cleared, allowed again
+    }
+
+    #[test]
+    fn test_rate_limiter_tracked_ip_count() {
+        let limiter = RateLimiter::new(10, 100);
+        assert_eq!(limiter.tracked_ip_count(), 0);
+        limiter.check("127.0.0.1");
+        limiter.check("127.0.0.2");
+        assert_eq!(limiter.tracked_ip_count(), 2);
+    }
+
+    #[test]
+    fn test_rate_limiter_burst_capacity() {
+        // Capacity 5 → can burst 5 requests immediately, 6th is blocked.
+        let limiter = RateLimiter::new(5, 0);
+        for _ in 0..5 {
+            assert!(limiter.check("10.0.0.1"));
+        }
+        assert!(!limiter.check("10.0.0.1"));
     }
 }

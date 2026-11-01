@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Hardware Specification Profiler
 //!
 //! ## Purpose
@@ -144,8 +142,12 @@ pub struct GpuSpec {
 /// ## Function Logging
 /// `timestamp - edgeforge-perf - hardware.rs - profile_hardware - STATUS`
 pub fn profile_hardware() -> Result<HardwareSpec, String> {
-    let mut guard =
-        FunctionGuard::new(&LOGGER, "edgeforge-perf", "hardware.rs", "profile_hardware");
+    let mut guard = FunctionGuard::new(
+        &LOGGER,
+        "edgeforge-perf",
+        "hardware.rs",
+        "profile_hardware",
+    );
     tracing::info!("Profiling hardware...");
 
     let mut sys = sysinfo::System::new_all();

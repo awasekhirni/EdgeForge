@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lib]
+name = "edgeforge_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "edgeforge"
 path = "src/main.rs"
@@ -12,6 +16,9 @@ path = "src/main.rs"
 [dependencies]
 edgeforge-core.workspace = true
 edgeforge-orchestration.workspace = true
+edgeforge-runtime.workspace = true
+edgeforge-crowd.workspace = true
+edgeforge-security.workspace = true
 edgeforge-api.workspace = true
 edgeforge-observability.workspace = true
 clap.workspace = true
@@ -23,3 +30,7 @@ toml = "0.8"
 serde_json.workspace = true
 ring.workspace = true
 hex.workspace = true
+
+[dev-dependencies]
+tempfile = "3.13"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

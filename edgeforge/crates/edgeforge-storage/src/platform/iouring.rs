@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Linux io_uring Backend (ADR-025, R-03)
 //!
 //! ## Purpose
@@ -99,12 +97,7 @@ impl PlatformIo for IoUring {
         if let Ok(fd) = std::fs::File::open(file.path()) {
             use std::os::fd::AsRawFd;
             unsafe {
-                libc::posix_fadvise(
-                    fd.as_raw_fd(),
-                    offset as i64,
-                    len as i64,
-                    libc::POSIX_FADV_WILLNEED,
-                );
+                libc::posix_fadvise(fd.as_raw_fd(), offset as i64, len as i64, libc::POSIX_FADV_WILLNEED);
             }
         }
     }

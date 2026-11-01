@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Churn-Resilient Scheduler (ADR-017)
 //!
 //! ## Purpose
@@ -113,8 +111,12 @@ impl ChurnResilientScheduler {
     /// ## Function Logging
     /// `timestamp - edgeforge-crowd - churn.rs - replication_factor - STATUS`
     pub fn replication_factor(&self) -> u8 {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-crowd", "churn.rs", "replication_factor");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-crowd",
+            "churn.rs",
+            "replication_factor",
+        );
         self.redundancy
     }
 
@@ -151,7 +153,12 @@ impl ChurnResilientScheduler {
 
     /// Returns the crowd tier.
     pub fn tier(&self) -> CrowdTier {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-crowd", "churn.rs", "tier");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-crowd",
+            "churn.rs",
+            "tier",
+        );
         self.tier
     }
 }

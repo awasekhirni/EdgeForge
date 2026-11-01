@@ -1,6 +1,5 @@
 # EdgeForge
-### Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-### Author: Awase Khirni Syed
+
 > **Local-first, SSD-backed desktop runtime for frontier-scale AI models (1T parameters).**
 >
 > Runs 744B–1T-parameter MoE models locally using an NVMe SSD as an extended memory tier, with optional pooling of multiple machines into a distributed compute network.

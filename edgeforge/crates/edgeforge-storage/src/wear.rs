@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # SSD Wear-Level Monitoring (F-MON-03)
 //!
 //! ## Purpose
@@ -131,18 +129,13 @@ pub fn read_ssd_health(device: &str) -> Result<SsdHealth, EdgeForgeError> {
                 }
                 None => {
                     guard.error("failed to parse smartctl output");
-                    Err(EdgeForgeError::Engine(
-                        "failed to parse smartctl output".to_string(),
-                    ))
+                    Err(EdgeForgeError::Engine("failed to parse smartctl output".to_string()))
                 }
             }
         }
         _ => {
             // smartctl not available — return stub.
-            tracing::warn!(
-                device = device,
-                "smartctl not available — returning stub health"
-            );
+            tracing::warn!(device = device, "smartctl not available — returning stub health");
             guard.success();
             Ok(read_ssd_health_stub())
         }
@@ -161,15 +154,10 @@ pub fn read_ssd_health(device: &str) -> Result<SsdHealth, EdgeForgeError> {
 /// ## Function Logging
 /// `timestamp - edgeforge-storage - wear.rs - read_ssd_health_stub - STATUS`
 pub fn read_ssd_health_stub() -> SsdHealth {
-    let _guard = FunctionGuard::new(
-        &LOGGER,
-        "edgeforge-storage",
-        "wear.rs",
-        "read_ssd_health_stub",
-    );
+    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "wear.rs", "read_ssd_health_stub");
     SsdHealth {
-        total_bytes_written: 5_000_000_000_000,     // ~5 TB written
-        percent_used: 10.0,                         // 10% used
+        total_bytes_written: 5_000_000_000_000, // ~5 TB written
+        percent_used: 10.0,                     // 10% used
         remaining_tbw_bytes: 1_995_000_000_000_000, // ~1995 TB remaining
     }
 }
@@ -190,12 +178,7 @@ pub fn read_ssd_health_stub() -> SsdHealth {
 /// ## Function Logging
 /// `timestamp - edgeforge-storage - wear.rs - parse_smartctl_output - STATUS`
 pub fn parse_smartctl_output(output: &str) -> Option<SsdHealth> {
-    let _guard = FunctionGuard::new(
-        &LOGGER,
-        "edgeforge-storage",
-        "wear.rs",
-        "parse_smartctl_output",
-    );
+    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-storage", "wear.rs", "parse_smartctl_output");
     let json: serde_json::Value = serde_json::from_str(output).ok()?;
 
     // NVMe SMART attributes are under nvme_smart_health_information_log.

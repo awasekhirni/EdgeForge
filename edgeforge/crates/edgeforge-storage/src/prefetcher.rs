@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Layer-Ahead Prefetcher (F-TIER-03)
 //!
 //! ## Purpose
@@ -28,41 +26,59 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 #[derive(Clone, Debug)]
 /// `PrefetchConfig` — see module documentation for purpose and usage.
-pub struct PrefetchConfig {
-    pub depth: u32,
-    pub thermal_throttle: bool,
-}
-impl Default for PrefetchConfig {
-    fn default() -> Self {
-        Self {
-            depth: 1,
-            thermal_throttle: false,
-        }
-    }
-}
+pub struct PrefetchConfig { pub depth: u32, pub thermal_throttle: bool }
+impl Default for PrefetchConfig { fn default() -> Self { Self { depth: 1, thermal_throttle: false } } }
 /// `Prefetcher` — see module documentation for purpose and usage.
-pub struct Prefetcher {
-    config: PrefetchConfig,
-    notify: Arc<Notify>,
-}
+pub struct Prefetcher { config: PrefetchConfig, notify: Arc<Notify> }
 impl Prefetcher {
     /// Creates a new instance with default configuration.
-    pub fn new(config: PrefetchConfig) -> Self {
-        Self {
-            config,
-            notify: Arc::new(Notify::new()),
-        }
-    }
+    pub fn new(config: PrefetchConfig) -> Self { Self { config, notify: Arc::new(Notify::new()) } }
     /// Notifies the prefetcher that a layer has completed.
-    pub fn notify_layer_done(&self, _layer: LayerIdx) {
-        self.notify.notify_waiters();
-    }
+    pub fn notify_layer_done(&self, _layer: LayerIdx) { self.notify.notify_waiters(); }
     /// Config — see module documentation for details.
-    pub fn config(&self) -> &PrefetchConfig {
-        &self.config
-    }
+    pub fn config(&self) -> &PrefetchConfig { &self.config }
     /// Sets the value of `thermal_throttle`.
-    pub fn set_thermal_throttle(&mut self, on: bool) {
-        self.config.thermal_throttle = on;
+    pub fn set_thermal_throttle(&mut self, on: bool) { self.config.thermal_throttle = on; }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let c = PrefetchConfig::default();
+        assert_eq!(c.depth, 1);
+        assert!(!c.thermal_throttle);
+    }
+
+    #[test]
+    fn test_new_prefetcher() {
+        let p = Prefetcher::new(PrefetchConfig::default());
+        assert_eq!(p.config().depth, 1);
+        assert!(!p.config().thermal_throttle);
+    }
+
+    #[test]
+    fn test_notify_layer_done_doesnt_panic() {
+        let p = Prefetcher::new(PrefetchConfig::default());
+        p.notify_layer_done(LayerIdx(0));
+        p.notify_layer_done(LayerIdx(1));
+    }
+
+    #[test]
+    fn test_set_thermal_throttle() {
+        let mut p = Prefetcher::new(PrefetchConfig::default());
+        assert!(!p.config().thermal_throttle);
+        p.set_thermal_throttle(true);
+        assert!(p.config().thermal_throttle);
+        p.set_thermal_throttle(false);
+        assert!(!p.config().thermal_throttle);
+    }
+
+    #[test]
+    fn test_custom_depth() {
+        let p = Prefetcher::new(PrefetchConfig { depth: 3, thermal_throttle: false });
+        assert_eq!(p.config().depth, 3);
     }
 }

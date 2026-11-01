@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Quality-vs-Speed Tradeoff Report (F-MON-02)
 //!
 //! ## Purpose
@@ -136,11 +134,7 @@ pub async fn run_quality_eval(
         "quality_eval.rs",
         "run_quality_eval",
     );
-    tracing::info!(
-        preset = preset,
-        precision = precision,
-        "Starting quality evaluation"
-    );
+    tracing::info!(preset = preset, precision = precision, "Starting quality evaluation");
 
     let params = GenParams {
         max_tokens: 64,
@@ -261,9 +255,7 @@ mod tests {
         let engine = MockInferenceEngine::new();
         let manifest = make_manifest();
         let model = engine.load(&manifest, ExecutionMode::Local).await.unwrap();
-        let result = run_quality_eval(&engine, &model, "quality", "fp16")
-            .await
-            .unwrap();
+        let result = run_quality_eval(&engine, &model, "quality", "fp16").await.unwrap();
         assert!(result.mmlu_lite_score >= 0.0 && result.mmlu_lite_score <= 1.0);
         assert!(result.humaneval_10_score >= 0.0 && result.humaneval_10_score <= 1.0);
     }

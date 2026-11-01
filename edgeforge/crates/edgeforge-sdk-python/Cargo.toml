@@ -4,6 +4,8 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Python SDK for EdgeForge — native client built with PyO3"
+readme = "README.md"
 
 [lib]
 name = "edgeforge_python"
@@ -14,10 +16,15 @@ edgeforge-core.workspace = true
 edgeforge-observability.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 tracing.workspace = true
 
-[features]
-default = []
-# Enable real PyO3 bindings. Requires Python dev headers.
-python = []
+# PyO3 — always on (this crate's whole purpose is to be a Python extension).
+# abi3-py39 means the wheel is compatible with Python 3.9+ without recompiling.
+pyo3 = { version = "0.22", features = ["abi3-py39", "extension-module"] }
+
+# reqwest for HTTP — blocking API so we can call it from PyO3 sync methods.
+reqwest = { version = "0.12", features = ["blocking", "json", "multipart"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3.13"

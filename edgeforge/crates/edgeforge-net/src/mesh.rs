@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Mesh Coordinator
 //!
 //! ## Purpose
@@ -21,8 +19,7 @@ use edgeforge_observability::function_logger::FunctionGuard;
 use tokio::sync::mpsc;
 
 /// Global logger reference for this module.
-static LOGGER: std::sync::LazyLock<edgeforge_observability::FunctionLogger> =
-    std::sync::LazyLock::new(edgeforge_observability::FunctionLogger::new);
+static LOGGER: std::sync::LazyLock<edgeforge_observability::FunctionLogger> = std::sync::LazyLock::new(edgeforge_observability::FunctionLogger::new);
 
 /// Events emitted by the mesh coordinator.
 #[derive(Clone, Debug)]
@@ -75,5 +72,48 @@ impl Default for Mesh {
     fn default() -> Self {
         let (s, _) = Self::new();
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_creates_channel_with_capacity() {
+        let (mesh, mut rx) = Mesh::new();
+        assert_eq!(mesh._events_tx.capacity(), 64);
+        // Receiver should be empty
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_with_capacity_custom() {
+        let (mesh, mut rx) = Mesh::with_capacity(128);
+        assert_eq!(mesh._events_tx.capacity(), 128);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_send_and_receive_event() {
+        let (mesh, mut rx) = Mesh::new();
+        let event = MeshEvent::HeartbeatTick;
+        let _ = mesh._events_tx.send(event).await;
+        let received = rx.recv().await;
+        assert!(matches!(received, Some(MeshEvent::HeartbeatTick)));
+    }
+
+    #[test]
+    fn test_mesh_event_variants() {
+        let peer = edgeforge_core::NodeId::new();
+        let _ = MeshEvent::PeerDiscovered { id: peer, hostname: "test".into() };
+        let _ = MeshEvent::PeerLost { id: peer };
+        let _ = MeshEvent::HeartbeatTick;
+    }
+
+    #[test]
+    fn test_default_creates_mesh() {
+        let (mesh, _rx) = Mesh::default();
+        assert_eq!(mesh._events_tx.capacity(), 64);
     }
 }

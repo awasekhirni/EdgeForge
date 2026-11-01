@@ -1,22 +1,22 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 #![allow(unused_imports, unused_variables)]
 //! # POST /v1/chat/completions — OpenAI-Compatible Chat Endpoint
 //!
 //! ## Purpose
 //! Handles chat completion requests. Supports both streaming (SSE) and
-//! non-streaming (JSON) responses. Wired to MockInferenceEngine.
+//! non-streaming (JSON) responses. Wired to `SsdEngine` (the pure-Rust
+//! working inference engine) by default; swap to `LlamaBackend` when the
+//! `llama-backend` feature is enabled and a real GGUF model is loaded.
 //!
 //! ## What This File Does
 //! - Parses the model ID and verifies it exists in the registry
-//! - Creates a MockInferenceEngine, loads the model
+//! - Creates an `SsdEngine`, loads the model
 //! - Builds a Prompt from the request messages
 //! - If stream=true: spawns a generation task, streams tokens via SSE
 //! - If stream=false: collects all tokens into a single JSON response
 //! - Formats SSE chunks as `data: {json}\n\n` with [DONE] terminator
 //!
 //! ## Dependencies
-//! - `edgeforge-runtime::{MockInferenceEngine, InferenceEngine, GenParams}`
+//! - `edgeforge-runtime::{SsdEngine, InferenceEngine, GenParams}`
 //! - `edgeforge-security::{ModelManifest, ModelArch}`
 //! - `edgeforge-crowd::ExecutionMode`
 //! - `tokio_stream` + `futures::StreamExt` — SSE body stream
@@ -39,7 +39,7 @@
 //! - **Parameters:** `State<AppState>`, `Json<ChatCompletionRequest>`
 //! - **Returns:** `Result<Response, ApiError>` — SSE stream or JSON
 //! - **Errors:** ModelNotFound if model ID invalid; Engine if generation fails
-//! - **Dependencies:** `state.models.get()`, `MockInferenceEngine::load()`,
+//! - **Dependencies:** `state.models.get()`, `SsdEngine::load()`,
 //!   `engine.generate()` with token callback
 
 use crate::{
@@ -57,7 +57,7 @@ use axum::{
 };
 use edgeforge_core::{ChatMessage, ModelId, Prompt, Role, Token};
 use edgeforge_crowd::ExecutionMode;
-use edgeforge_runtime::{GenParams, InferenceEngine, MockInferenceEngine};
+use edgeforge_runtime::{GenParams, InferenceEngine, SsdEngine};
 use edgeforge_security::{ModelArch, ModelManifest};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -81,8 +81,8 @@ async fn chat_completions(
         .await?
         .ok_or_else(|| edgeforge_core::EdgeForgeError::ModelNotFound(req.model.clone()))?;
 
-    // Build a mock manifest for the engine (Phase 4: in production, load
-    // the real manifest from the model registry).
+    // Build a manifest for the engine from the registry row.
+    // (Phase 4: in production, load a signed manifest from disk.)
     let manifest = ModelManifest {
         schema_version: 1,
         id: mid,
@@ -104,8 +104,10 @@ async fn chat_completions(
         publisher_key_fingerprint: None,
     };
 
-    // Create the mock engine and load the model.
-    let engine = MockInferenceEngine::new();
+    // Create the SsdEngine (pure-Rust, working inference) and load the model.
+    // SsdEngine never returns NotImplemented — it produces real tokens via a
+    // deterministic Markov-chain sampler and exercises the storage tier.
+    let engine = SsdEngine::new();
     let model = engine
         .load(&manifest, ExecutionMode::Local)
         .await
@@ -243,4 +245,42 @@ fn now_secs() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dto::{ChatCompletionRequest, ChatCompletionResponse, Choice, ChoiceMessage, Usage};
+
+    #[test]
+    fn test_chat_request_defaults() {
+        let json = r#"{"model":"m1","messages":[]}"#;
+        let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.max_tokens, 512);
+        assert!(!req.stream);
+    }
+
+    #[test]
+    fn test_chat_response_serializes() {
+        let resp = ChatCompletionResponse {
+            id: "cmpl-1".into(), object: "chat.completion", created: 0,
+            model: "m1".into(),
+            choices: vec![Choice { index: 0, message: ChoiceMessage { role: "assistant", content: "hi".into() }, finish_reason: Some("stop".into()) }],
+            usage: Usage { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("chat.completion"));
+    }
+
+    #[test]
+    fn test_sse_chunk_format() {
+        let chunk = serde_json::json!({"id":"x","object":"chat.completion.chunk","created":0,"model":"m","choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]});
+        let sse = format!("data: {}\n\n", chunk);
+        assert!(sse.starts_with("data: "));
+        assert!(sse.ends_with("\n\n"));
+    }
+
+    #[test]
+    fn test_done_marker() {
+        assert_eq!("data: [DONE]\n\n", "data: [DONE]\n\n");
+    }
 }

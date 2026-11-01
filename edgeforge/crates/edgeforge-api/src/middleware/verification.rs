@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # X-EdgeForge-Verification Header Middleware (ADR-018)
 //!
 //! ## Purpose
@@ -91,12 +89,7 @@ impl std::fmt::Display for VerificationHeaderValue {
 /// ## Function Logging
 /// `timestamp - edgeforge-api - verification.rs - set_verification_header - STATUS`
 pub fn set_verification_header(headers: &mut HeaderMap, outcome: VerificationOutcome) {
-    let _guard = FunctionGuard::new(
-        &LOGGER,
-        "edgeforge-api",
-        "verification.rs",
-        "set_verification_header",
-    );
+    let _guard = FunctionGuard::new(&LOGGER, "edgeforge-api", "verification.rs", "set_verification_header");
     let value = VerificationHeaderValue::from_outcome(outcome);
     if let Ok(hv) = HeaderValue::from_str(value.as_str()) {
         headers.insert(HEADER_NAME, hv);
@@ -152,10 +145,7 @@ mod tests {
 
     #[test]
     fn test_verification_header_value_as_str() {
-        assert_eq!(
-            VerificationHeaderValue::NotRequired.as_str(),
-            "not_required"
-        );
+        assert_eq!(VerificationHeaderValue::NotRequired.as_str(), "not_required");
         assert_eq!(VerificationHeaderValue::Verified.as_str(), "verified");
         assert_eq!(VerificationHeaderValue::Pending.as_str(), "pending");
         assert_eq!(VerificationHeaderValue::Corrected.as_str(), "corrected");

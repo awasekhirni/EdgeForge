@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Dual-LLM Privilege Separation (ADR-020)
 //!
 //! ## Purpose
@@ -37,130 +35,125 @@
 //! - **Dependencies:** guardrails.classify_intent, planner.plan, quarantine.read_and_summarize,
 //!   spotlighter.spotlight, worker.execute_step, plan.permitted_tools check
 
-use crate::spotlighting::Spotlighter;
 use async_trait::async_trait;
 use edgeforge_core::{EdgeForgeError, Prompt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use crate::spotlighting::Spotlighter;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 /// `PrivilegeLevel` enumeration — see module documentation for variants.
-pub enum PrivilegeLevel {
-    Privileged,
-    Unprivileged,
-}
+pub enum PrivilegeLevel { Privileged, Unprivileged }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `ActionPlan` — see module documentation for purpose and usage.
-pub struct ActionPlan {
-    pub intent_summary: String,
-    pub steps: Vec<PlanStep>,
-    pub permitted_tools: Vec<String>,
-    pub external_resources: Vec<String>,
-}
+pub struct ActionPlan { pub intent_summary: String, pub steps: Vec<PlanStep>, pub permitted_tools: Vec<String>, pub external_resources: Vec<String> }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `PlanStep` — see module documentation for purpose and usage.
-pub struct PlanStep {
-    pub description: String,
-    pub tool: Option<String>,
-    pub arguments: serde_json::Value,
-}
+pub struct PlanStep { pub description: String, pub tool: Option<String>, pub arguments: serde_json::Value }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `DecodedAction` — see module documentation for purpose and usage.
-pub struct DecodedAction {
-    pub tool: String,
-    pub arguments: serde_json::Value,
-    pub plan_step_index: usize,
-}
+pub struct DecodedAction { pub tool: String, pub arguments: serde_json::Value, pub plan_step_index: usize }
 #[async_trait]
 /// The `PlannerLlm` trait — see module documentation for the contract.
-pub trait PlannerLlm: Send + Sync + 'static {
-    async fn plan(&self, prompt: &Prompt) -> Result<ActionPlan, PrivilegeError>;
-}
+pub trait PlannerLlm: Send + Sync + 'static { async fn plan(&self, prompt: &Prompt) -> Result<ActionPlan, PrivilegeError>; }
 #[async_trait]
 /// The `WorkerLlm` trait — see module documentation for the contract.
-pub trait WorkerLlm: Send + Sync + 'static {
-    async fn execute_step(
-        &self,
-        plan: &ActionPlan,
-        step_index: usize,
-        ctx: &str,
-    ) -> Result<DecodedAction, PrivilegeError>;
-}
+pub trait WorkerLlm: Send + Sync + 'static { async fn execute_step(&self, plan: &ActionPlan, step_index: usize, ctx: &str) -> Result<DecodedAction, PrivilegeError>; }
 #[derive(Debug, thiserror::Error)]
 /// `PrivilegeError` enumeration — see module documentation for variants.
 pub enum PrivilegeError {
-    #[error("planner failed: {0}")]
-    PlannerFailed(String),
-    #[error("worker failed: {0}")]
-    WorkerFailed(String),
-    #[error("plan deviation: expected {expected}, got {got}")]
-    PlanDeviation { expected: usize, got: usize },
-    #[error("tool not permitted: {tool}")]
-    ToolNotPermitted { tool: String },
-    #[error("malformed plan: {0}")]
-    MalformedPlan(String),
+    #[error("planner failed: {0}")] PlannerFailed(String),
+    #[error("worker failed: {0}")] WorkerFailed(String),
+    #[error("plan deviation: expected {expected}, got {got}")] PlanDeviation { expected: usize, got: usize },
+    #[error("tool not permitted: {tool}")] ToolNotPermitted { tool: String },
+    #[error("malformed plan: {0}")] MalformedPlan(String),
 }
-impl From<PrivilegeError> for EdgeForgeError {
-    fn from(e: PrivilegeError) -> Self {
-        EdgeForgeError::SandboxDenied(e.to_string())
-    }
-}
-impl From<crate::quarantine::QuarantineError> for PrivilegeError {
-    fn from(e: crate::quarantine::QuarantineError) -> Self {
-        Self::PlannerFailed(format!("quarantine: {e}"))
-    }
-}
+impl From<PrivilegeError> for EdgeForgeError { fn from(e: PrivilegeError) -> Self { EdgeForgeError::SandboxDenied(e.to_string()) } }
+impl From<crate::quarantine::QuarantineError> for PrivilegeError { fn from(e: crate::quarantine::QuarantineError) -> Self { Self::PlannerFailed(format!("quarantine: {e}")) } }
 /// `DualLlmPipeline` — see module documentation for purpose and usage.
-pub struct DualLlmPipeline {
-    pub planner: Arc<dyn PlannerLlm>,
-    pub worker: Arc<dyn WorkerLlm>,
-    pub guardrails: Arc<dyn crate::IntentGuardrails>,
-    pub quarantine: Arc<dyn crate::QuarantineReader>,
-    pub spotlighter: Spotlighter,
-}
+pub struct DualLlmPipeline { pub planner: Arc<dyn PlannerLlm>, pub worker: Arc<dyn WorkerLlm>, pub guardrails: Arc<dyn crate::IntentGuardrails>, pub quarantine: Arc<dyn crate::QuarantineReader>, pub spotlighter: Spotlighter }
 impl DualLlmPipeline {
     /// Creates a new instance with default configuration.
-    pub fn new(
-        planner: Arc<dyn PlannerLlm>,
-        worker: Arc<dyn WorkerLlm>,
-        guardrails: Arc<dyn crate::IntentGuardrails>,
-        quarantine: Arc<dyn crate::QuarantineReader>,
-        spotlighter: Spotlighter,
-    ) -> Self {
-        Self {
-            planner,
-            worker,
-            guardrails,
-            quarantine,
-            spotlighter,
-        }
-    }
+    pub fn new(planner: Arc<dyn PlannerLlm>, worker: Arc<dyn WorkerLlm>, guardrails: Arc<dyn crate::IntentGuardrails>, quarantine: Arc<dyn crate::QuarantineReader>, spotlighter: Spotlighter) -> Self { Self { planner, worker, guardrails, quarantine, spotlighter } }
     /// Executes the main logic of this function.
     pub async fn run(&self, prompt: &Prompt) -> Result<DecodedAction, PrivilegeError> {
         let pre = self.guardrails.classify_intent(prompt).await;
-        if let crate::GuardrailVerdict::Reject(v) = pre {
-            return Err(PrivilegeError::PlannerFailed(format!("rejected: {v}")));
-        }
+        if let crate::GuardrailVerdict::Reject(v) = pre { return Err(PrivilegeError::PlannerFailed(format!("rejected: {v}"))); }
         let plan = self.planner.plan(prompt).await?;
         let mut ctx = String::new();
         for res in &plan.external_resources {
-            let s = self
-                .quarantine
-                .read_and_summarize(res, &plan.intent_summary)
-                .await?;
-            ctx.push_str(&self.spotlighter.spotlight(&s.text));
-            ctx.push('\n');
+            let s = self.quarantine.read_and_summarize(res, &plan.intent_summary).await?;
+            ctx.push_str(&self.spotlighter.spotlight(&s.text)); ctx.push('\n');
         }
         let action = self.worker.execute_step(&plan, 0, &ctx).await?;
-        if !plan.permitted_tools.contains(&action.tool) {
-            return Err(PrivilegeError::ToolNotPermitted { tool: action.tool });
-        }
-        if action.plan_step_index != 0 {
-            return Err(PrivilegeError::PlanDeviation {
-                expected: 0,
-                got: action.plan_step_index,
-            });
-        }
+        if !plan.permitted_tools.contains(&action.tool) { return Err(PrivilegeError::ToolNotPermitted { tool: action.tool }); }
+        if action.plan_step_index != 0 { return Err(PrivilegeError::PlanDeviation { expected: 0, got: action.plan_step_index }); }
         Ok(action)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgeforge_core::{ChatMessage, Prompt, Role};
+
+    #[test]
+    fn test_privilege_level_equality() {
+        assert_eq!(PrivilegeLevel::Privileged, PrivilegeLevel::Privileged);
+        assert_ne!(PrivilegeLevel::Privileged, PrivilegeLevel::Unprivileged);
+    }
+
+    #[test]
+    fn test_action_plan_serializes() {
+        let plan = ActionPlan {
+            intent_summary: "search for docs".into(),
+            steps: vec![PlanStep { description: "step1".into(), tool: Some("search".into()), arguments: serde_json::json!({}) }],
+            permitted_tools: vec!["search".into()],
+            external_resources: vec![],
+        };
+        let json = serde_json::to_string(&plan).unwrap();
+        assert!(json.contains("search for docs"));
+        assert!(json.contains("permitted_tools"));
+    }
+
+    #[test]
+    fn test_decoded_action_serializes() {
+        let action = DecodedAction { tool: "search".into(), arguments: serde_json::json!({"q": "test"}), plan_step_index: 0 };
+        let json = serde_json::to_string(&action).unwrap();
+        assert!(json.contains("search"));
+        assert!(json.contains("plan_step_index"));
+    }
+
+    #[test]
+    fn test_privilege_error_display() {
+        let e = PrivilegeError::PlannerFailed("bad prompt".into());
+        assert!(e.to_string().contains("planner failed"));
+        assert!(e.to_string().contains("bad prompt"));
+    }
+
+    #[test]
+    fn test_privilege_error_tool_not_permitted() {
+        let e = PrivilegeError::ToolNotPermitted { tool: "delete".into() };
+        assert!(e.to_string().contains("delete"));
+    }
+
+    #[test]
+    fn test_privilege_error_plan_deviation() {
+        let e = PrivilegeError::PlanDeviation { expected: 0, got: 1 };
+        assert!(e.to_string().contains("0"));
+        assert!(e.to_string().contains("1"));
+    }
+
+    #[test]
+    fn test_privilege_error_to_edgeforge_error() {
+        let e: EdgeForgeError = PrivilegeError::MalformedPlan("bad".into()).into();
+        assert!(matches!(e, EdgeForgeError::SandboxDenied(_)));
+    }
+
+    #[test]
+    fn test_privilege_error_from_quarantine_error() {
+        let qe = crate::quarantine::QuarantineError::Unreadable("test".into());
+        let pe: PrivilegeError = qe.into();
+        assert!(matches!(pe, PrivilegeError::PlannerFailed(_)));
     }
 }

@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Distributed Mesh Coordinator (F-NET-*)
 //!
 //! ## Purpose
@@ -251,10 +249,7 @@ mod tests {
     fn test_assign_and_query() {
         let mc = MeshCoordinator::new();
         let n1 = make_node();
-        mc.assign_experts(
-            n1,
-            &[(LayerIdx(0), ExpertId(1)), (LayerIdx(0), ExpertId(2))],
-        );
+        mc.assign_experts(n1, &[(LayerIdx(0), ExpertId(1)), (LayerIdx(0), ExpertId(2))]);
         assert_eq!(mc.owner_of(LayerIdx(0), ExpertId(1)), Some(n1));
         assert_eq!(mc.owner_of(LayerIdx(0), ExpertId(2)), Some(n1));
         assert_eq!(mc.owner_of(LayerIdx(1), ExpertId(1)), None);
@@ -278,10 +273,7 @@ mod tests {
     fn test_node_loss_returns_orphans() {
         let mc = MeshCoordinator::new();
         let n1 = make_node();
-        mc.assign_experts(
-            n1,
-            &[(LayerIdx(0), ExpertId(1)), (LayerIdx(1), ExpertId(2))],
-        );
+        mc.assign_experts(n1, &[(LayerIdx(0), ExpertId(1)), (LayerIdx(1), ExpertId(2))]);
         let lost = mc.handle_node_loss(n1);
         assert_eq!(lost.len(), 2);
         assert_eq!(mc.owner_of(LayerIdx(0), ExpertId(1)), None);

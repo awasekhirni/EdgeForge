@@ -5,9 +5,21 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+# Enable the real QUIC mesh transport (quinn + rustls + rcgen). When this
+# feature is OFF, the crate falls back to an in-process LoopbackTransport
+# that satisfies the same MeshTransport contract and is suitable for
+# integration tests and single-node development.
+quic-transport = ["dep:quinn", "dep:rustls", "dep:rcgen", "dep:rustls-pemfile"]
+# Enable real mDNS peer discovery via the zeroconf crate (requires Avahi on
+# Linux, Bonjour on macOS). When OFF, MdnsDiscovery uses an in-memory cache.
+mdns = ["dep:zeroconf"]
+
 [dependencies]
 edgeforge-core.workspace = true
 edgeforge-observability.workspace = true
+edgeforge-storage = { workspace = true, optional = true }
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -15,8 +27,28 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 chrono = "0.4"
+parking_lot.workspace = true
+ulid.workspace = true
+
+# Real-mode deps (only pulled in when quic-transport feature is on)
+quinn = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true, features = ["ring"] }
+rcgen = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
+
+# mDNS dep (only pulled in when mdns feature is on)
+zeroconf = { workspace = true, optional = true }
+
+# Always-available crypto deps (used by the in-process mTLS fallback)
+ring.workspace = true
+ed25519-dalek.workspace = true
+base64.workspace = true
+hex.workspace = true
+
+# Tempfile for repage_from_ssd_simple (used at runtime, not just tests)
+tempfile = "3.13"
 
 [dev-dependencies]
 tempfile = "3.13"
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 ulid.workspace = true

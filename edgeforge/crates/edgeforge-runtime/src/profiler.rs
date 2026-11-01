@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Per-Layer Latency Profiler (F-MON-05)
 //!
 //! ## Purpose

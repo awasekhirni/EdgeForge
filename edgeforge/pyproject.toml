@@ -1,0 +1,78 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "edgeforge"
+version = "0.1.0"
+description = "Python SDK for EdgeForge — native client built with PyO3"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+authors = [
+    { name = "EdgeForge Team" },
+]
+keywords = ["llm", "inference", "edge", "gguf", "edgeforge"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # No runtime dependencies — the SDK is a self-contained native extension.
+    # urllib is used only by the pure-Python fallback (_fallback.py) which is
+    # imported only if the compiled extension is unavailable.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/edgeforge"
+Documentation = "https://github.com/your-org/edgeforge/tree/main/crates/edgeforge-sdk-python"
+Repository = "https://github.com/your-org/edgeforge"
+
+# ── Maturin config ─────────────────────────────────────────────────────────
+
+[tool.maturin]
+# The Rust crate to build.
+manifest-path = "crates/edgeforge-sdk-python/Cargo.toml"
+# Python source directory (for the pure-Python fallback).
+python-source = "python"
+# The module name (must match the #[pymodule] function name).
+module-name = "edgeforge"
+# Build with abi3 for forward compatibility (cp39+).
+features = ["pyo3/abi3-py39"]
+# Strip symbols for smaller wheels.
+strip = true
+# Include the pure-Python fallback in the wheel.
+include = [
+    { path = "python/edgeforge/_fallback.py", format = "wheel" },
+    { path = "python/edgeforge/__init__.py", format = "wheel" },
+]
+
+[tool.maturin.target.x86_64-apple-darwin]
+# macOS x86_64
+
+[tool.maturin.target.aarch64-apple-darwin]
+# macOS Apple Silicon
+
+[tool.maturin.target.x86_64-unknown-linux-gnu]
+# Linux x86_64 (manylinux)
+
+[tool.maturin.target.aarch64-unknown-linux-gnu]
+# Linux aarch64 (manylinux)
+
+[tool.maturin.target.x86_64-pc-windows-msvc]
+# Windows x64

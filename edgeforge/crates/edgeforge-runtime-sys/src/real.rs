@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Real FFI Module
 //!
 //! ## Purpose
@@ -71,7 +69,9 @@ impl Drop for LlamaContextInner {
 static BACKEND_INIT: std::sync::Once = std::sync::Once::new();
 
 fn ensure_backend_init() {
-    BACKEND_INIT.call_once(|| unsafe { llama_backend_init(false) });
+    BACKEND_INIT.call_once(|| {
+        unsafe { llama_backend_init(false) }
+    });
 }
 
 /// Load a model from a GGUF file.
@@ -263,7 +263,10 @@ pub fn decode(ctx: &mut LlamaContext, tokens: &[i32]) -> Result<(), FfiError> {
     batch.n_tokens = tokens.len() as i32;
     batch.token = tokens.as_ptr() as *mut llama_token;
     batch.pos = (0..tokens.len() as i32).collect::<Vec<_>>().as_ptr() as *mut llama_pos;
-    batch.n_seq_id = (0..tokens.len()).map(|_| 1).collect::<Vec<_>>().as_ptr() as *mut i32;
+    batch.n_seq_id = (0..tokens.len())
+        .map(|_| 1)
+        .collect::<Vec<_>>()
+        .as_ptr() as *mut i32;
     batch.seq_id = (0..tokens.len())
         .map(|_| [1i32].as_ptr())
         .collect::<Vec<_>>()

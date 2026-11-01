@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Dark theme (default) */
+.bg-app {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Light theme */
+.theme-light .bg-app {
+  background-color: #f8fafc;
+  color: #1e293b;
+}

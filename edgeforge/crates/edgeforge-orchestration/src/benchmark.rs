@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Throughput Benchmark Harness (F-MON-01)
 //!
 //! ## Purpose
@@ -175,16 +173,8 @@ pub async fn run_benchmark(
         tokens_per_sec: tok_per_sec,
         first_token_ms: stats.first_token_ms,
         elapsed_ms: stats.elapsed_ms,
-        ssd_read_mbps: if stats.ssd_read_mbps > 0.0 {
-            Some(stats.ssd_read_mbps)
-        } else {
-            None
-        },
-        ssd_temp_celsius: if stats.ssd_temp_celsius > 0.0 {
-            Some(stats.ssd_temp_celsius)
-        } else {
-            None
-        },
+        ssd_read_mbps: if stats.ssd_read_mbps > 0.0 { Some(stats.ssd_read_mbps) } else { None },
+        ssd_temp_celsius: if stats.ssd_temp_celsius > 0.0 { Some(stats.ssd_temp_celsius) } else { None },
         cold_cache: stats.cold_cache,
         speculation_acceptance_rate: None,
         prefetch_hit_rate: None,

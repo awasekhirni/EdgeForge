@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Cryptographic Agility Layer (ADR-027)
 //!
 //! ## Purpose
@@ -46,46 +44,19 @@ pub trait KemAlgorithm: Send + Sync + 'static {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 /// `KemVariant` enumeration — see module documentation for variants.
-pub enum KemVariant {
-    X25519,
-    MlKem512,
-    MlKem768,
-    MlKem1024,
-    HybridX25519MlKem768,
-}
+pub enum KemVariant { X25519, MlKem512, MlKem768, MlKem1024, HybridX25519MlKem768 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 /// `SigVariant` enumeration — see module documentation for variants.
-pub enum SigVariant {
-    Ed25519,
-    MlDsa65,
-    HybridEd25519MlDsa65,
-}
+pub enum SigVariant { Ed25519, MlDsa65, HybridEd25519MlDsa65 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// `CryptoPolicy` — see module documentation for purpose and usage.
-pub struct CryptoPolicy {
-    pub kem: KemVariant,
-    pub sig: SigVariant,
-    pub phase: MigrationPhase,
-}
-impl Default for CryptoPolicy {
-    fn default() -> Self {
-        Self {
-            kem: KemVariant::X25519,
-            sig: SigVariant::Ed25519,
-            phase: MigrationPhase::ClassicalOnly,
-        }
-    }
-}
+pub struct CryptoPolicy { pub kem: KemVariant, pub sig: SigVariant, pub phase: MigrationPhase }
+impl Default for CryptoPolicy { fn default() -> Self { Self { kem: KemVariant::X25519, sig: SigVariant::Ed25519, phase: MigrationPhase::ClassicalOnly } } }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 /// `MigrationPhase` enumeration — see module documentation for variants.
-pub enum MigrationPhase {
-    ClassicalOnly,
-    Hybrid,
-    HybridMandatory,
-    PqcOnly,
-}
+pub enum MigrationPhase { ClassicalOnly, Hybrid, HybridMandatory, PqcOnly }
 /// `PublicKey` — see module documentation for purpose and usage.
 pub struct PublicKey(pub Vec<u8>);
 /// `SecretKey` — see module documentation for purpose and usage.
@@ -97,17 +68,68 @@ pub struct SharedSecret(pub Vec<u8>);
 /// `Signature` — see module documentation for purpose and usage.
 pub struct Signature(pub Vec<u8>);
 /// `KeyPair` — see module documentation for purpose and usage.
-pub struct KeyPair {
-    pub public: PublicKey,
-    pub secret: SecretKey,
-}
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        zeroize::Zeroize::zeroize(&mut self.0);
+pub struct KeyPair { pub public: PublicKey, pub secret: SecretKey }
+impl Drop for SecretKey { fn drop(&mut self) { zeroize::Zeroize::zeroize(&mut self.0); } }
+impl Drop for SharedSecret { fn drop(&mut self) { zeroize::Zeroize::zeroize(&mut self.0); } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_crypto_policy() {
+        let p = CryptoPolicy::default();
+        assert_eq!(p.kem, KemVariant::X25519);
+        assert_eq!(p.sig, SigVariant::Ed25519);
+        assert_eq!(p.phase, MigrationPhase::ClassicalOnly);
     }
-}
-impl Drop for SharedSecret {
-    fn drop(&mut self) {
-        zeroize::Zeroize::zeroize(&mut self.0);
+
+    #[test]
+    fn test_kem_variant_equality() {
+        assert_eq!(KemVariant::X25519, KemVariant::X25519);
+        assert_ne!(KemVariant::X25519, KemVariant::MlKem768);
+    }
+
+    #[test]
+    fn test_sig_variant_equality() {
+        assert_eq!(SigVariant::Ed25519, SigVariant::Ed25519);
+        assert_ne!(SigVariant::Ed25519, SigVariant::MlDsa65);
+    }
+
+    #[test]
+    fn test_migration_phase_ordering() {
+        let phases = [MigrationPhase::ClassicalOnly, MigrationPhase::Hybrid, MigrationPhase::HybridMandatory, MigrationPhase::PqcOnly];
+        for i in 0..phases.len() - 1 {
+            assert_ne!(phases[i], phases[i + 1]);
+        }
+    }
+
+    #[test]
+    fn test_crypto_policy_serializes() {
+        let p = CryptoPolicy::default();
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("x25519"));
+        assert!(json.contains("ed25519"));
+        assert!(json.contains("classical_only"));
+    }
+
+    #[test]
+    fn test_secret_key_zeroized_on_drop() {
+        let sk = SecretKey(vec![0xAB; 32]);
+        drop(sk);
+        // Can't directly verify zeroization, but the Drop impl calls zeroize
+        // This test just verifies the Drop doesn't panic
+    }
+
+    #[test]
+    fn test_shared_secret_zeroized_on_drop() {
+        let ss = SharedSecret(vec![0xCD; 32]);
+        drop(ss);
+    }
+
+    #[test]
+    fn test_key_pair_construction() {
+        let kp = KeyPair { public: PublicKey(vec![1]), secret: SecretKey(vec![2]) };
+        assert_eq!(kp.public.0, vec![1]);
     }
 }

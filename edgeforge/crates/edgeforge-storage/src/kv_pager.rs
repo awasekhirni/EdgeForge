@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Paged KV Cache with SSD Spill (F-TIER-04, F-TIER-06)
 //!
 //! ## Purpose
@@ -166,13 +164,10 @@ impl KvCachePager {
 
         inner.clock += 1;
         let now = inner.clock;
-        inner.resident.insert(
-            id,
-            CacheEntry {
-                bytes,
-                last_access: now,
-            },
-        );
+        inner.resident.insert(id, CacheEntry {
+            bytes,
+            last_access: now,
+        });
         inner.current_bytes += incoming;
         inner.misses += 1;
     }
@@ -201,10 +196,7 @@ impl KvCachePager {
     ///
     /// # Errors
     /// Returns `Io` error if the SSD write fails.
-    pub fn spill_to_ssd(
-        &self,
-        id: KvPageId,
-    ) -> Result<std::path::PathBuf, edgeforge_core::EdgeForgeError> {
+    pub fn spill_to_ssd(&self, id: KvPageId) -> Result<std::path::PathBuf, edgeforge_core::EdgeForgeError> {
         let mut inner = self.inner.lock();
         let entry = inner.resident.remove(&id).ok_or_else(|| {
             edgeforge_core::EdgeForgeError::Engine(format!("page {:?} not resident", id))
@@ -212,10 +204,7 @@ impl KvCachePager {
         inner.current_bytes -= entry.bytes.len() as u64;
         inner.evictions += 1;
 
-        let path = self
-            .config
-            .ssd_dir
-            .join(format!("kv_{}_{}.bin", id.layer.0, id.page));
+        let path = self.config.ssd_dir.join(format!("kv_{}_{}.bin", id.layer.0, id.page));
         std::fs::write(&path, &entry.bytes).map_err(|e| edgeforge_core::EdgeForgeError::Io {
             path: path.clone(),
             source: e,
@@ -232,10 +221,7 @@ impl KvCachePager {
     /// # Errors
     /// Returns `Io` error if the SSD read fails.
     pub fn load_from_ssd(&self, id: KvPageId) -> Result<bool, edgeforge_core::EdgeForgeError> {
-        let path = self
-            .config
-            .ssd_dir
-            .join(format!("kv_{}_{}.bin", id.layer.0, id.page));
+        let path = self.config.ssd_dir.join(format!("kv_{}_{}.bin", id.layer.0, id.page));
         if !path.exists() {
             return Ok(false);
         }
@@ -413,10 +399,7 @@ mod tests {
 
         let path = pager.spill_to_ssd(id(0, 0)).unwrap();
         assert!(path.exists());
-        assert!(
-            !pager.contains(id(0, 0)),
-            "page should be evicted from RAM after spill"
-        );
+        assert!(!pager.contains(id(0, 0)), "page should be evicted from RAM after spill");
         assert_eq!(pager.current_bytes(), 0);
     }
 

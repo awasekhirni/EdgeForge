@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Real-Time Performance Monitor
 //!
 //! ## Purpose
@@ -144,8 +142,12 @@ impl PerfMonitor {
         tracker: std::sync::Arc<FunctionPerfTracker>,
         registry: std::sync::Arc<ComparativeRegistry>,
     ) -> Result<Self, String> {
-        let mut guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-perf", "monitor.rs", "PerfMonitor::new");
+        let mut guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "monitor.rs",
+            "PerfMonitor::new",
+        );
         let hardware = crate::hardware::profile_hardware()?;
         guard.success();
         Ok(Self {
@@ -169,7 +171,12 @@ impl PerfMonitor {
     /// ## Function Logging
     /// `timestamp - edgeforge-perf - monitor.rs - take_snapshot - STATUS`
     pub fn take_snapshot(&self) -> PerfSnapshot {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "monitor.rs", "take_snapshot");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "monitor.rs",
+            "take_snapshot",
+        );
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();
 
@@ -213,7 +220,12 @@ impl PerfMonitor {
     /// ## Function Logging
     /// `timestamp - edgeforge-perf - monitor.rs - set_baseline - STATUS`
     pub fn set_baseline(&self) {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "monitor.rs", "set_baseline");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "monitor.rs",
+            "set_baseline",
+        );
         let stats = self.tracker.get_all_stats();
         *self.baseline.write() = stats;
         tracing::info!(
@@ -234,8 +246,12 @@ impl PerfMonitor {
     /// ## Function Logging
     /// `timestamp - edgeforge-perf - monitor.rs - check_regression - STATUS`
     pub fn check_regression(&self) -> Vec<RegressionAlert> {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-perf", "monitor.rs", "check_regression");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "monitor.rs",
+            "check_regression",
+        );
         let baseline = self.baseline.read();
         if baseline.is_empty() {
             return Vec::new();
@@ -245,12 +261,10 @@ impl PerfMonitor {
         let mut alerts = Vec::new();
 
         for base in baseline.iter() {
-            if let Some(curr) = current
-                .iter()
-                .find(|c| c.function_name == base.function_name)
-            {
-                let threshold_p99 =
-                    (base.p99_duration_us as f64 * (1.0 + self.config.regression_threshold)) as u64;
+            if let Some(curr) = current.iter().find(|c| c.function_name == base.function_name) {
+                let threshold_p99 = (base.p99_duration_us as f64
+                    * (1.0 + self.config.regression_threshold))
+                    as u64;
                 if curr.p99_duration_us > threshold_p99 {
                     let pct_increase = if base.p99_duration_us > 0 {
                         ((curr.p99_duration_us as f64 - base.p99_duration_us as f64)
@@ -289,7 +303,12 @@ impl PerfMonitor {
 
     /// Returns the hardware specification.
     pub fn hardware(&self) -> &HardwareSpec {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "monitor.rs", "hardware");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "monitor.rs",
+            "hardware",
+        );
         &self.hardware
     }
 }
@@ -302,24 +321,16 @@ mod tests {
     fn test_take_snapshot() {
         let tracker = std::sync::Arc::new(FunctionPerfTracker::with_signature("test"));
         let registry = std::sync::Arc::new(ComparativeRegistry::new());
-        let monitor =
-            PerfMonitor::new(PerfMonitorConfig::default(), tracker.clone(), registry).unwrap();
+        let monitor = PerfMonitor::new(
+            PerfMonitorConfig::default(),
+            tracker.clone(),
+            registry,
+        )
+        .unwrap();
 
         // Record some calls.
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn1",
-            crate::function_perf::FunctionKpi::success(100),
-            None,
-        );
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn2",
-            crate::function_perf::FunctionKpi::success(200),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "fn1", crate::function_perf::FunctionKpi::success(100), None);
+        tracker.record_call("c", "f.rs", "fn2", crate::function_perf::FunctionKpi::success(200), None);
 
         let snapshot = monitor.take_snapshot();
         assert!(snapshot.tracked_functions >= 2);
@@ -342,24 +353,12 @@ mod tests {
         .unwrap();
 
         // Baseline: 100µs.
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn1",
-            crate::function_perf::FunctionKpi::success(100),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "fn1", crate::function_perf::FunctionKpi::success(100), None);
         monitor.set_baseline();
 
         // Clear and record slower calls.
         tracker.clear();
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn1",
-            crate::function_perf::FunctionKpi::success(200),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "fn1", crate::function_perf::FunctionKpi::success(200), None);
 
         let alerts = monitor.check_regression();
         assert!(!alerts.is_empty());
@@ -381,22 +380,10 @@ mod tests {
         )
         .unwrap();
 
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn1",
-            crate::function_perf::FunctionKpi::success(100),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "fn1", crate::function_perf::FunctionKpi::success(100), None);
         monitor.set_baseline();
         tracker.clear();
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn1",
-            crate::function_perf::FunctionKpi::success(110),
-            None,
-        ); // 10% increase
+        tracker.record_call("c", "f.rs", "fn1", crate::function_perf::FunctionKpi::success(110), None); // 10% increase
 
         let alerts = monitor.check_regression();
         assert!(alerts.is_empty()); // 10% < 50% threshold
@@ -406,7 +393,12 @@ mod tests {
     fn test_no_regression_without_baseline() {
         let tracker = std::sync::Arc::new(FunctionPerfTracker::with_signature("test"));
         let registry = std::sync::Arc::new(ComparativeRegistry::new());
-        let monitor = PerfMonitor::new(PerfMonitorConfig::default(), tracker, registry).unwrap();
+        let monitor = PerfMonitor::new(
+            PerfMonitorConfig::default(),
+            tracker,
+            registry,
+        )
+        .unwrap();
         let alerts = monitor.check_regression();
         assert!(alerts.is_empty()); // No baseline set
     }
@@ -415,23 +407,15 @@ mod tests {
     fn test_snapshot_has_slowest_functions() {
         let tracker = std::sync::Arc::new(FunctionPerfTracker::with_signature("test"));
         let registry = std::sync::Arc::new(ComparativeRegistry::new());
-        let monitor =
-            PerfMonitor::new(PerfMonitorConfig::default(), tracker.clone(), registry).unwrap();
+        let monitor = PerfMonitor::new(
+            PerfMonitorConfig::default(),
+            tracker.clone(),
+            registry,
+        )
+        .unwrap();
 
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fast_fn",
-            crate::function_perf::FunctionKpi::success(10),
-            None,
-        );
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "slow_fn",
-            crate::function_perf::FunctionKpi::success(1000),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "fast_fn", crate::function_perf::FunctionKpi::success(10), None);
+        tracker.record_call("c", "f.rs", "slow_fn", crate::function_perf::FunctionKpi::success(1000), None);
 
         let snapshot = monitor.take_snapshot();
         assert!(!snapshot.slowest_functions.is_empty());

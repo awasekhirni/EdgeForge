@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # edgeforge-kpi — Architecture KPI Dashboard (ADR-030)
 //!
 //! ## Purpose
@@ -31,4 +29,4 @@ pub mod qppo;
 pub mod traceability;
 pub use carbon::{CarbonAwareRouter, CarbonEstimate, CarbonIntensitySource};
 pub use qppo::{ProcessAreaId, Qppo, QppoId, QppoSet, QppoStatus, QppoViolation};
-pub use traceability::{AdrId, ArchitecturalTrace, ReqId, TestId, TraceabilityMatrix};
+pub use traceability::{ArchitecturalTrace, AdrId, ReqId, TestId, TraceabilityMatrix};

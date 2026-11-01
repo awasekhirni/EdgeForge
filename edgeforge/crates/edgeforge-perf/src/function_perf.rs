@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Per-Function Performance Tracking with KPI Metrics
 //!
 //! ## Purpose
@@ -205,8 +203,12 @@ impl FunctionPerfTracker {
         kpi: FunctionKpi,
         model_id: Option<&str>,
     ) {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-perf", "function_perf.rs", "record_call");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "function_perf.rs",
+            "record_call",
+        );
         let entry = FunctionPerfLog {
             timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             crate_name: crate_name.to_string(),
@@ -243,7 +245,12 @@ impl FunctionPerfTracker {
     /// ## Returns
     /// `Option<FunctionStats>` — aggregated stats, or None if no calls recorded.
     pub fn get_stats(&self, function_name: &str) -> Option<FunctionStats> {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "function_perf.rs", "get_stats");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "function_perf.rs",
+            "get_stats",
+        );
         let logs = self.logs.lock();
         let matching: Vec<&FunctionPerfLog> = logs
             .iter()
@@ -314,7 +321,12 @@ impl FunctionPerfTracker {
 
     /// Dump all performance logs as JSON.
     pub fn dump_json(&self) -> String {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "function_perf.rs", "dump_json");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "function_perf.rs",
+            "dump_json",
+        );
         let logs = self.logs.lock();
         serde_json::to_string_pretty(logs.as_slice()).unwrap_or_else(|_| "[]".to_string())
     }
@@ -333,7 +345,12 @@ impl FunctionPerfTracker {
 
     /// Returns the number of recorded calls.
     pub fn len(&self) -> usize {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "function_perf.rs", "len");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "function_perf.rs",
+            "len",
+        );
         self.logs.lock().len()
     }
 
@@ -355,7 +372,12 @@ impl FunctionPerfTracker {
 
     /// Clear all recorded logs.
     pub fn clear(&self) {
-        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-perf", "function_perf.rs", "clear");
+        let _guard = FunctionGuard::new(
+            &LOGGER,
+            "edgeforge-perf",
+            "function_perf.rs",
+            "clear",
+        );
         self.logs.lock().clear();
     }
 }
@@ -441,27 +463,9 @@ mod tests {
     #[test]
     fn test_record_and_get_stats() {
         let tracker = FunctionPerfTracker::with_signature("test-platform");
-        tracker.record_call(
-            "test-crate",
-            "file.rs",
-            "fn1",
-            FunctionKpi::success(100),
-            None,
-        );
-        tracker.record_call(
-            "test-crate",
-            "file.rs",
-            "fn1",
-            FunctionKpi::success(200),
-            None,
-        );
-        tracker.record_call(
-            "test-crate",
-            "file.rs",
-            "fn1",
-            FunctionKpi::error(150, "err"),
-            None,
-        );
+        tracker.record_call("test-crate", "file.rs", "fn1", FunctionKpi::success(100), None);
+        tracker.record_call("test-crate", "file.rs", "fn1", FunctionKpi::success(200), None);
+        tracker.record_call("test-crate", "file.rs", "fn1", FunctionKpi::error(150, "err"), None);
 
         let stats = tracker.get_stats("fn1").unwrap();
         assert_eq!(stats.call_count, 3);
@@ -506,13 +510,7 @@ mod tests {
         let start = Instant::now();
         std::thread::sleep(Duration::from_millis(1));
         let duration_us = start.elapsed().as_micros() as u64;
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "test_guard",
-            FunctionKpi::success(duration_us),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "test_guard", FunctionKpi::success(duration_us), None);
         let stats = tracker.get_stats("test_guard").unwrap();
         assert!(stats.mean_duration_us > 0.0);
     }
@@ -520,13 +518,7 @@ mod tests {
     #[test]
     fn test_perf_guard_error() {
         let tracker = FunctionPerfTracker::with_signature("test");
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "test_err",
-            FunctionKpi::error(500, "fail"),
-            None,
-        );
+        tracker.record_call("c", "f.rs", "test_err", FunctionKpi::error(500, "fail"), None);
         let stats = tracker.get_stats("test_err").unwrap();
         assert_eq!(stats.success_rate, 0.0);
     }
@@ -551,13 +543,7 @@ mod tests {
     #[test]
     fn test_model_id_attribution() {
         let tracker = FunctionPerfTracker::with_signature("test");
-        tracker.record_call(
-            "c",
-            "f.rs",
-            "fn",
-            FunctionKpi::success(10),
-            Some("model-123"),
-        );
+        tracker.record_call("c", "f.rs", "fn", FunctionKpi::success(10), Some("model-123"));
         let logs = tracker.dump_json();
         assert!(logs.contains("model-123"));
     }

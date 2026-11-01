@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! Phase 4: End-to-end integration test.
 //!
 //! Exercises the full pipeline: MockInferenceEngine → router hook →
@@ -12,9 +10,7 @@
 mod tests {
     use edgeforge_core::{ChatMessage, ExpertId, LayerIdx, ModelId, Prompt, Role, Token};
     use edgeforge_crowd::{ExecutionMode, VerificationOutcome};
-    use edgeforge_runtime::{
-        ExpertResolution, GenParams, InferenceEngine, MockInferenceEngine, RouterHook,
-    };
+    use edgeforge_runtime::{ExpertResolution, GenParams, InferenceEngine, MockInferenceEngine, RouterHook};
     use edgeforge_security::{ModelArch, ModelManifest};
 
     /// A test router hook that always returns RAM (simulating a warm cache).

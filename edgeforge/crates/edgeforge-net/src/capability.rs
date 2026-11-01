@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Peer Capability Descriptor (G-03 fix)
 //!
 //! ## Purpose
@@ -22,8 +20,7 @@ use edgeforge_observability::function_logger::FunctionGuard;
 use serde::{Deserialize, Serialize};
 
 /// Global logger reference for this module.
-static LOGGER: std::sync::LazyLock<edgeforge_observability::FunctionLogger> =
-    std::sync::LazyLock::new(edgeforge_observability::FunctionLogger::new);
+static LOGGER: std::sync::LazyLock<edgeforge_observability::FunctionLogger> = std::sync::LazyLock::new(edgeforge_observability::FunctionLogger::new);
 
 /// A peer's hardware capability + currently-hosted experts.
 ///
@@ -88,8 +85,7 @@ impl PeerCapability {
     /// ## Formula
     /// `vram_bytes / 1_500_000_000` (1.5 GB per Q4_K_M expert)
     pub fn expert_capacity(&self) -> u32 {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-net", "capability.rs", "expert_capacity");
+        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-net", "capability.rs", "expert_capacity");
         if self.vram_bytes == 0 {
             return 0;
         }
@@ -105,8 +101,7 @@ impl PeerCapability {
     /// ## Returns
     /// `true` if the peer can host another expert.
     pub fn can_host_expert(&self) -> bool {
-        let _guard =
-            FunctionGuard::new(&LOGGER, "edgeforge-net", "capability.rs", "can_host_expert");
+        let _guard = FunctionGuard::new(&LOGGER, "edgeforge-net", "capability.rs", "can_host_expert");
         self.hosted_experts.len() < self.expert_capacity() as usize
     }
 
@@ -157,7 +152,10 @@ mod tests {
     fn test_cannot_host_expert_when_full() {
         let cap = PeerCapability {
             vram_bytes: 3_000_000_000, // 2 experts max
-            hosted_experts: vec![(LayerIdx(0), ExpertId(0)), (LayerIdx(0), ExpertId(1))],
+            hosted_experts: vec![
+                (LayerIdx(0), ExpertId(0)),
+                (LayerIdx(0), ExpertId(1)),
+            ],
             ..Default::default()
         };
         assert!(!cap.can_host_expert()); // 2 == 2

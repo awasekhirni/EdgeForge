@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Quarantine Reader LLM (ADR-023)
 //!
 //! ## Purpose
@@ -87,17 +85,23 @@ impl From<QuarantineError> for edgeforge_core::EdgeForgeError {
 /// ## Purpose
 /// Reads the raw content of an external resource. Supports:
 /// - `file://` — reads from the local filesystem
-/// - `http://` and `https://` — Phase 12 stub (requires HTTP client dependency)
+/// - `http://` and `https://` — fetches via HTTP using `reqwest::blocking`
+/// - bare file paths (no scheme) — treated as file://
 ///
 /// ## Parameters
-/// - `resource`: The resource URI (file:// or http(s)://).
+/// - `resource`: The resource URI (file://, http(s)://, or a bare path).
 ///
 /// ## Returns
 /// `Ok(String)` — the raw content of the resource.
 ///
 /// ## Errors
-/// - `Unreadable` if the resource cannot be read.
+/// - `Unreadable` if the resource cannot be read (file not found, HTTP error, etc.).
 /// - `Unreadable("unsupported scheme")` for non-file, non-HTTP schemes.
+///
+/// ## HTTP Fetching
+/// HTTP resources are fetched synchronously via `reqwest::blocking::get`.
+/// The response body is read as text. The maximum response size is 10 MiB
+/// to prevent unbounded memory consumption.
 ///
 /// ## Function Logging
 /// `timestamp - edgeforge-promptsec - quarantine.rs - fetch_resource - STATUS`
@@ -113,22 +117,88 @@ pub async fn fetch_resource(resource: &str) -> Result<String, QuarantineError> {
         let path = resource.trim_start_matches("file://");
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| QuarantineError::Unreadable(e.to_string()))?;
+            .map_err(|e| {
+                let err = QuarantineError::Unreadable(e.to_string());
+                guard.error(&err.to_string());
+                err
+            })?;
+        tracing::debug!(
+            resource = resource,
+            content_len = content.len(),
+            "fetch_resource: fetched file:// resource"
+        );
         guard.success();
         Ok(content)
     } else if resource.starts_with("http://") || resource.starts_with("https://") {
-        // Phase 12: HTTP fetching requires an HTTP client dependency (e.g., reqwest).
-        // For now, return an error indicating HTTP is not yet supported.
-        // Phase 13+: wire reqwest behind a feature flag.
-        let err = QuarantineError::Unreadable(format!(
-            "HTTP fetching not yet implemented — resource: {resource}"
-        ));
-        guard.error(&err.to_string());
-        Err(err)
-    } else {
+        // HTTP fetching via reqwest::blocking. The blocking client runs on its
+        // own thread pool so it doesn't interfere with the async runtime.
+        tracing::debug!(resource = resource, "fetch_resource: fetching HTTP resource");
+
+        let resource_owned = resource.to_string();
+        let content = tokio::task::spawn_blocking(move || -> Result<String, QuarantineError> {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .max_redirects(5)
+                .build()
+                .map_err(|e| QuarantineError::Unreadable(format!("HTTP client build failed: {e}")))?;
+
+            let resp = client
+                .get(&resource_owned)
+                .send()
+                .map_err(|e| QuarantineError::Unreadable(format!("HTTP request failed: {e}")))?;
+
+            if !resp.status().is_success() {
+                return Err(QuarantineError::Unreadable(format!(
+                    "HTTP {} {}",
+                    resp.status().as_u16(),
+                    resp.status().canonical_reason().unwrap_or("Unknown")
+                )));
+            }
+
+            // Limit response size to 10 MiB to prevent unbounded memory.
+            let content_length = resp.content_length().unwrap_or(0);
+            if content_length > 10 * 1024 * 1024 {
+                return Err(QuarantineError::Unreadable(format!(
+                    "response too large: {content_length} bytes (max 10 MiB)"
+                )));
+            }
+
+            let text = resp
+                .text()
+                .map_err(|e| QuarantineError::Unreadable(format!("failed to read response body: {e}")))?;
+
+            Ok(text)
+        })
+        .await
+        .map_err(|e| QuarantineError::Unreadable(format!("fetch task failed: {e}")))??;
+
+        tracing::debug!(
+            resource = resource,
+            content_len = content.len(),
+            "fetch_resource: fetched HTTP resource"
+        );
+        guard.success();
+        Ok(content)
+    } else if resource.starts_with("ftp://") || resource.starts_with("sftp://") {
         let err = QuarantineError::Unreadable(format!("unsupported scheme: {resource}"));
         guard.error(&err.to_string());
         Err(err)
+    } else {
+        // No scheme — treat as a bare file path.
+        let content = tokio::fs::read_to_string(resource)
+            .await
+            .map_err(|e| {
+                let err = QuarantineError::Unreadable(e.to_string());
+                guard.error(&err.to_string());
+                err
+            })?;
+        tracing::debug!(
+            resource = resource,
+            content_len = content.len(),
+            "fetch_resource: fetched bare file path"
+        );
+        guard.success();
+        Ok(content)
     }
 }
 
@@ -178,11 +248,7 @@ pub fn sanitize_content(content: &str) -> (String, f32) {
             // Replace the pattern (case-insensitive) with [SANITIZED].
             sanitized = sanitized.replace(pattern, "[SANITIZED]");
             // Also try capitalized version.
-            let cap: String = pattern
-                .chars()
-                .next()
-                .map(|c| c.to_uppercase().collect::<String>())
-                .unwrap_or_default()
+            let cap: String = pattern.chars().next().map(|c| c.to_uppercase().collect::<String>()).unwrap_or_default()
                 + &pattern[1..];
             sanitized = sanitized.replace(&cap, "[SANITIZED]");
         }
@@ -288,15 +354,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fetch_http_not_implemented() {
-        let result = fetch_resource("https://example.com").await;
-        assert!(result.is_err());
+    async fn test_fetch_http_connection_error() {
+        // HTTP fetching is now implemented. Pointing to a non-existent server
+        // should return an Unreadable error (connection refused).
+        let result = fetch_resource("http://127.0.0.1:1/nonexistent").await;
+        assert!(result.is_err(), "HTTP fetch to non-existent server should fail");
+        match result {
+            Err(QuarantineError::Unreadable(_)) => {}
+            _ => panic!("expected Unreadable error for failed HTTP fetch"),
+        }
     }
 
     #[tokio::test]
     async fn test_fetch_unsupported_scheme() {
         let result = fetch_resource("ftp://example.com").await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_bare_file_path() {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), b"bare path content").unwrap();
+        let path = tmp.path().to_string_lossy().to_string();
+        let result = fetch_resource(&path).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "bare path content");
     }
 
     #[test]

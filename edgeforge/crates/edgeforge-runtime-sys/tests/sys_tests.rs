@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Runtime Sys Tests — edgeforge-runtime-sys
 //!
 //! Tests for: stub mode behavior, FfiError display, is_available.
@@ -15,7 +13,7 @@ mod tests {
         let result = load_model(path, &LlamaModelParams::default());
         assert!(result.is_err());
         match result {
-            Err(FfiError::NotImplemented(_)) => {} // expected
+            Err(FfiError::NotImplemented(_)) => {}, // expected
             _ => panic!("expected NotImplemented error"),
         }
     }

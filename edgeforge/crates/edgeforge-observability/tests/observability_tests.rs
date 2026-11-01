@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Observability Tests — edgeforge-observability
 //!
 //! Tests for: subscriber initialization, idempotency.

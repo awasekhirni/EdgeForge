@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Tracing Subscriber Setup
 //!
 //! ## Purpose
@@ -34,13 +32,34 @@ static INIT: OnceLock<()> = OnceLock::new();
 /// Init — see module documentation for details.
 pub fn init(cfg: &Config) -> ObservabilityGuard {
     INIT.get_or_init(|| {
-        let env_filter = EnvFilter::try_new(&cfg.observability.log_level)
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+        let env_filter = EnvFilter::try_new(&cfg.observability.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
         let fmt_layer = fmt::layer().with_target(true);
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(fmt_layer)
-            .init();
+        tracing_subscriber::registry().with(env_filter).with(fmt_layer).init();
     });
     ObservabilityGuard
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_returns_guard() {
+        let cfg = Config::default();
+        let _guard = init(&cfg);
+        // Should not panic
+    }
+
+    #[test]
+    fn test_init_is_idempotent() {
+        let cfg = Config::default();
+        let _g1 = init(&cfg);
+        let _g2 = init(&cfg);
+        // Second init should be a no-op (OnceLock)
+    }
+
+    #[test]
+    fn test_guard_is_zero_sized() {
+        assert_eq!(std::mem::size_of::<ObservabilityGuard>(), 0);
+    }
 }

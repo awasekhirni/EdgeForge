@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 #![allow(unexpected_cfgs)]
 //! # edgeforge-runtime-sys — Unsafe FFI Bindings to llama.cpp
 //!
@@ -161,3 +159,43 @@ pub struct LlamaContext {
     #[cfg(not(llama_stub))]
     inner: real::LlamaContextInner,
 }
+
+// ── Send/Sync impls ────────────────────────────────────────────────────────
+//
+// `LlamaModel` and `LlamaContext` wrap raw `*mut` pointers in real mode, which
+// are `!Send` + `!Sync` by default. To store them inside `Arc<Mutex<...>>` (so
+// `LlamaBackend` can cache loaded models across `generate()` calls and remain
+// `Send + Sync` per the `InferenceEngine` contract), we promise:
+//
+//   1. `llama_model` handles are thread-safe to **share** for read-only
+//      operations (tokenize, detokenize, vocab queries). llama.cpp's own
+//      internal locking makes this safe.
+//   2. `llama_context` handles are **not** safe to share across threads
+//      concurrently — they are guarded by a `Mutex` at the call site, so we
+//      only promise `Send` (ownership transfer), not `Sync` (shared ref).
+//
+// This is the only crate allowed to declare `unsafe impl` (per ADR-025), and
+// every `unsafe` block here is covered by these justifications + Kani harnesses
+// in `tests/sys_tests.rs`.
+//
+// In stub mode the inner type is `()`, which is already `Send + Sync`, so the
+// impls below are gated to real mode only.
+
+#[cfg(not(llama_stub))]
+// SAFETY: `LlamaModel` wraps a `*mut llama_model`. llama.cpp model handles are
+// safe to share across threads for read-only operations (tokenize, detokenize,
+// vocab queries). The pointer is never mutated after construction; only the
+// context (a separate type) is mutated during generation.
+unsafe impl Send for LlamaModel {}
+
+#[cfg(not(llama_stub))]
+// SAFETY: See `Send` impl — model handles are immutable post-construction and
+// llama.cpp's internal locking makes concurrent read-only access safe.
+unsafe impl Sync for LlamaModel {}
+
+#[cfg(not(llama_stub))]
+// SAFETY: `LlamaContext` wraps a `*mut llama_context`. Contexts are mutated
+// during decode/sample, but at the call site we always guard them with a
+// `Mutex`, so transferring ownership across threads (Send) is safe. We do NOT
+// impl `Sync` because concurrent &mut access would be UB.
+unsafe impl Send for LlamaContext {}

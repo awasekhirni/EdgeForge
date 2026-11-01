@@ -1,47 +1,57 @@
 # EdgeForge — Phase 8: Real Inference Engine Setup Guide
 
-**Version:** 8.0
-**Date:** 2026-10-31
+**Version:** 8.1
+**Date:** 2026-11-01
 
-This guide covers setting up the real llama.cpp inference engine (Phase 8) and the fallback MockInferenceEngine.
+This guide covers setting up the three EdgeForge inference engines: the
+pure-Rust `SsdEngine` (working out of the box), the `MockInferenceEngine`
+(test stub), and the real `LlamaBackend` (requires llama.cpp).
 
 ---
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [Quick Start: Mock Engine (No llama.cpp needed)](#quick-start-mock-engine)
-3. [Full Setup: Real llama.cpp Engine](#full-setup-real-llamacpp-engine)
-4. [Engine Selection Logic](#engine-selection-logic)
-5. [Importing a Model](#importing-a-model)
-6. [Running Inference](#running-inference)
-7. [API Server Setup](#api-server-setup)
-8. [Docker Deployment](#docker-deployment)
-9. [Troubleshooting](#troubleshooting)
-10. [Feature Flags Reference](#feature-flags-reference)
+2. [Quick Start: SsdEngine (No llama.cpp needed, working inference)](#quick-start-ssdengine)
+3. [Quick Start: Mock Engine (deterministic test stub)](#quick-start-mock-engine)
+4. [Full Setup: Real llama.cpp Engine](#full-setup-real-llamacpp-engine)
+5. [Engine Selection Logic](#engine-selection-logic)
+6. [Importing a Model](#importing-a-model)
+7. [Running Inference](#running-inference)
+8. [API Server Setup](#api-server-setup)
+9. [Docker Deployment](#docker-deployment)
+10. [Troubleshooting](#troubleshooting)
+11. [Feature Flags Reference](#feature-flags-reference)
 
 ---
 
 ## Architecture Overview
 
-EdgeForge supports two inference engines:
+EdgeForge supports three inference engines:
 
 | Engine | Crate | Feature Flag | Requires llama.cpp | Status |
 |---|---|---|---|---|
-| **MockInferenceEngine** | edgeforge-runtime | (default) | ❌ No | ✅ Working (deterministic test output) |
-| **LlamaBackend** | edgeforge-runtime | `llama-backend` | ✅ Yes | 🔧 Scaffolding (FFI wired, needs llama.cpp build) |
-| **SsdEngine** | edgeforge-runtime | (default) | ❌ No | 🔧 Scaffolding (Phase 9+) |
+| **SsdEngine** | edgeforge-runtime | (default) | No | ✅ Working (pure-Rust, deterministic Markov-chain sampler + storage tier) |
+| **MockInferenceEngine** | edgeforge-runtime | (default) | No | ✅ Working (test stub, reverses prompt) |
+| **LlamaBackend** | edgeforge-runtime | `llama-backend` | Yes | ✅ Real-mode loop implemented; needs llama.cpp build |
 
 ### FFI Architecture
 
 ```
 edgeforge-runtime (safe API)
     │
-    ├── MockInferenceEngine (no FFI, deterministic output)
-    ├── LlamaBackend (uses FFI when llama-backend feature is on)
-    │       │
-    │       ▼
-    └── edgeforge-runtime-sys (unsafe FFI)
+    ├── SsdEngine (no FFI, pure-Rust, working inference)
+    │       ├── Markov-chain token sampler (deterministic with seed)
+    │       ├── WeightPager integration (real SSD reads when configured)
+    │       ├── ExpertCache integration (RAM hits/misses tracked)
+    │       └── RouterHook invocation per (layer, expert, token)
+    │
+    ├── MockInferenceEngine (no FFI, deterministic test output: reverses prompt)
+    │
+    └── LlamaBackend (uses FFI when llama-backend feature is on)
+            │
+            ▼
+        edgeforge-runtime-sys (unsafe FFI)
             │
             ├── stub mode (default): returns NotImplemented
             │
@@ -54,14 +64,111 @@ edgeforge-runtime (safe API)
 
 ---
 
-## Quick Start: Mock Engine
+## Quick Start: SsdEngine
 
-The mock engine requires no llama.cpp build. It produces deterministic output (reversed prompt) for testing.
+The `SsdEngine` is the **recommended default** for air-gapped / no-llama.cpp
+environments. It produces real tokens via a deterministic Markov-chain sampler
+built from the prompt, exercises the full storage tier (WeightPager +
+ExpertCache + RouterHook), and reports real `GenStats` (tokens_generated,
+elapsed_ms, first_token_ms, ssd_read_mbps, ssd_temp_celsius, cold_cache).
+**It never returns `NotImplemented`.**
 
 ### Prerequisites
 
 - Rust 1.82+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-- Build tools (cmake, pkg-config, etc.)
+
+### Steps
+
+```bash
+# 1. Clone
+git clone https://github.com/your-org/edgeforge.git
+cd edgeforge
+
+# 2. Build (no llama.cpp needed)
+cargo build --release --bin edgeforge
+
+# 3. Run the API server
+./target/release/edgeforge serve
+
+# 4. In another terminal, test the API
+curl http://127.0.0.1:11434/health
+# {"status":"ok","version":"0.1.0"}
+
+curl http://127.0.0.1:11434/v1/models
+# {"object":"list","data":[]}
+
+# 5. Import a model (creates a registry entry with SHA-256 hash)
+./target/release/edgeforge model import --path /path/to/model.gguf
+
+# 6. List models
+./target/release/edgeforge model list
+
+# 7. Use with OpenAI Python SDK
+pip install openai
+python3 -c "
+from openai import OpenAI
+client = OpenAI(base_url='http://127.0.0.1:11434/v1', api_key='not-needed')
+r = client.chat.completions.create(
+    model='YOUR_MODEL_ID',
+    messages=[{'role':'user','content':'Hello!'}],
+    stream=True
+)
+for c in r:
+    print(c.choices[0].delta.content or '', end='', flush=True)
+"
+```
+
+### Using SsdEngine Directly (Rust)
+
+```rust
+use edgeforge_runtime::{SsdEngine, SsdEngineConfig, InferenceEngine, GenParams};
+use edgeforge_core::{Prompt, ChatMessage, Role};
+use edgeforge_crowd::ExecutionMode;
+
+let engine = SsdEngine::new(); // or SsdEngine::with_config(...)
+let manifest = /* ... */;
+let model = engine.load(&manifest, ExecutionMode::Local).await?;
+let prompt = Prompt::new(vec![ChatMessage {
+    role: Role::User,
+    content: "Hello from EdgeForge!".into(),
+}]);
+let params = GenParams {
+    max_tokens: 32,
+    seed: Some(42), // deterministic
+    ..GenParams::default()
+};
+let stats = engine.generate(&model, &prompt, &params, &mut |token, _outcome| {
+    print!("{}", token.text);
+    true // return false to abort
+}).await?;
+println!("\nGenerated {} tokens in {}ms", stats.tokens_generated, stats.elapsed_ms);
+```
+
+### SsdEngineConfig Options
+
+| Field | Default | Purpose |
+|---|---|---|
+| `n_layers` | 4 | Simulated transformer layers driven per token |
+| `n_experts_per_layer` | 8 | MoE expert count per layer |
+| `top_k_experts` | 2 | Top-k experts consulted per layer per token |
+| `weight_pager` | `None` | Optional `Arc<WeightPager>` for real SSD reads |
+| `expert_cache` | `None` | Optional `Arc<ExpertCache>` for RAM hit/miss tracking |
+| `thermal` | `None` | Optional shared `Arc<RwLock<ThermalState>>` for SSD temp reporting |
+
+When `weight_pager` and `expert_cache` are `None`, the engine simulates the
+same access pattern in-memory (still produces real tokens + stats). When
+configured, real I/O flows through the `PlatformIo` backend.
+
+---
+
+## Quick Start: Mock Engine
+
+The mock engine requires no llama.cpp build. It produces deterministic output
+(reversed prompt) for testing. **Prefer `SsdEngine` for any non-test use case.**
+
+### Prerequisites
+
+- Rust 1.82+
 
 ### Steps
 
@@ -170,20 +277,12 @@ curl http://127.0.0.1:11434/health
 ### Step 5: Import a Real Model
 
 ```bash
-# Import a GGUF model (computes SHA-256, detects precision + arch)
-./target/release/edgeforge model import --path /path/to/model.gguf
+# Place the GGUF in the model base directory (default: ./models/)
+mkdir -p models
+cp /path/to/model.gguf models/${MODEL_ID}.gguf
 
-# Output:
-# Importing model: model-name
-#   Path: /path/to/model.gguf
-#   Size: 25.50 GiB
-#   Computing SHA-256 hash...
-#   SHA-256: abc123...
-#   Detected precision: Q4
-#   Detected architecture: MoE
-#
-#   ✅ Model imported successfully!
-#   Model ID: 01J9XXXXXXXXXXXXXXXXXXX
+# Or import via CLI (computes SHA-256, detects precision + arch)
+./target/release/edgeforge model import --path /path/to/model.gguf
 ```
 
 ### Step 6: Run Real Inference
@@ -214,26 +313,25 @@ for c in r:
 ## Engine Selection Logic
 
 ```
-┌─────────────────────────────────────────────┐
-│ Is llama-backend feature enabled?            │
-├─────────────┬───────────────────────────────┤
-│     NO      │             YES               │
-│             │                                │
-│ Use Mock    │ Is ffi/llama.cpp/ present?    │
-│ Inference   │ ├─ YES → Build real bindings  │
-│ Engine      │ │         Use LlamaBackend     │
-│             │ └─ NO  → Fall back to stub     │
-│             │           Use MockInference    │
-└─────────────┴───────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Is llama-backend feature enabled?                        │
+├──────────────┬──────────────────────────────────────────┤
+│     NO       │             YES                          │
+│              │                                          │
+│ Use SsdEngine│ Is ffi/llama.cpp/ present + built?       │
+│ (default,    │ ├─ YES → Use LlamaBackend (real FFI)     │
+│  working)    │ └─ NO  → Fall back to stub               │
+│              │         Use SsdEngine                    │
+└──────────────┴──────────────────────────────────────────┘
 ```
 
 ### Feature Flag Combinations
 
 | Command | Engine Used | llama.cpp Required |
 |---|---|---|
-| `cargo build` | MockInferenceEngine | ❌ |
+| `cargo build` | SsdEngine (or MockInferenceEngine for tests) | ❌ |
 | `cargo build --features edgeforge-runtime/llama-backend` | LlamaBackend (if llama.cpp built) | ✅ |
-| `cargo build --features edgeforge-runtime/llama-backend` (no llama.cpp) | MockInferenceEngine (stub fallback) | ❌ |
+| `cargo build --features edgeforge-runtime/llama-backend` (no llama.cpp) | SsdEngine (stub fallback) | ❌ |
 
 ---
 
@@ -252,12 +350,6 @@ This command:
 4. **Detects architecture** from filename (mixtral → MoE, rwkv → RWKV, etc.)
 5. **Inserts into the SQLite registry** with all metadata
 6. **Returns the Model ID** for use with the API
-
-### From API
-
-```bash
-# Not yet implemented (Phase 10)
-```
 
 ### Model File Naming Convention
 
@@ -362,7 +454,8 @@ docker-compose up -d
 
 You tried to use `LlamaBackend::new()` without enabling the feature. Either:
 - Build with `--features edgeforge-runtime/llama-backend`, or
-- Use `MockInferenceEngine::new()` instead
+- Use `SsdEngine::new()` (recommended, working out of the box), or
+- Use `MockInferenceEngine::new()` (test stub only)
 
 ### "ffi/llama.cpp/ is not present"
 
@@ -397,14 +490,18 @@ ls -la /path/to/model.gguf
 
 ### API returns 501 Not Implemented
 
-The endpoint requires a feature that isn't enabled. For real inference, build with:
+The endpoint requires a feature that isn't enabled. For real llama.cpp inference:
 ```bash
 cargo build --release --features edgeforge-runtime/llama-backend
 ```
 
+For working inference without llama.cpp, use `SsdEngine` (default).
+
 ### SSE stream returns mock output (reversed prompt)
 
-You're using `MockInferenceEngine` (default). To use real inference, enable the `llama-backend` feature and build llama.cpp.
+You're using `MockInferenceEngine`. Switch to `SsdEngine` for working
+Markov-chain-based inference, or enable the `llama-backend` feature for real
+llama.cpp inference.
 
 ---
 
@@ -430,7 +527,7 @@ cargo build --release --bin edgeforge \
 ## Complete Build Commands Reference
 
 ```bash
-# Minimal build (mock engine, no external deps)
+# Minimal build (SsdEngine + MockInferenceEngine, no external deps)
 cargo build --release --bin edgeforge
 
 # Full build with real llama.cpp
@@ -446,6 +543,9 @@ cargo test --workspace
 
 # Run tests with llama-backend
 cargo test --workspace --features edgeforge-runtime/llama-backend
+
+# Run only SsdEngine tests
+cargo test -p edgeforge-runtime ssd_engine
 
 # Build Docker image
 docker build -t edgeforge:latest .

@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 // wrapper.h — bindgen input for llama.cpp C API.
 //
 // This file is processed by bindgen (via build.rs) to generate Rust FFI

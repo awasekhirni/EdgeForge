@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 // edgeforge-runtime-sys/build.rs
 //
 // Builds llama.cpp as a static library and generates Rust FFI bindings via bindgen.
@@ -94,23 +92,13 @@ fn main() {
         .unwrap_or(4);
     let status = Command::new("cmake")
         .current_dir(&llama_build_dir)
-        .args([
-            "--build",
-            ".",
-            "--config",
-            "Release",
-            "-j",
-            &nproc.to_string(),
-        ])
+        .args(["--build", ".", "--config", "Release", "-j", &nproc.to_string()])
         .status()
         .expect("failed to run cmake build");
     assert!(status.success(), "cmake build failed");
 
     // Link the static library.
-    println!(
-        "cargo:rustc-link-search=native={}",
-        llama_build_dir.display()
-    );
+    println!("cargo:rustc-link-search=native={}", llama_build_dir.display());
     println!("cargo:rustc-link-lib=static=llama");
     println!("cargo:rustc-link-lib=stdc++");
 

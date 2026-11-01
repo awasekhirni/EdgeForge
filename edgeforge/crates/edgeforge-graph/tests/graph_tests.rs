@@ -1,15 +1,13 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # Graph Tests — edgeforge-graph
 //!
 //! Tests for: GraphCore, GraphIngest, GraphQuery, StreamingGraph trait.
 
 #[cfg(test)]
 mod tests {
-    use edgeforge_core::{Celsius, ExpertId, LayerIdx, NodeId};
     use edgeforge_graph::*;
-    use std::sync::Arc;
+    use edgeforge_core::{Celsius, ExpertId, LayerIdx, NodeId};
     use ulid::Ulid;
+    use std::sync::Arc;
 
     // ── GraphCore Tests ─────────────────────────────────────────────
 
@@ -61,15 +59,11 @@ mod tests {
     #[test]
     fn test_graph_ingest_enqueue_and_drain() {
         let core = Arc::new(core_::GraphCore::new());
-        let ingest =
-            ingest::GraphIngest::new(core.clone(), ingest::GraphIngestConfig { capacity: 16 });
+        let ingest = ingest::GraphIngest::new(core.clone(), ingest::GraphIngestConfig { capacity: 16 });
         let event = edgeforge_core::ControlEvent {
             timestamp_ms: 0,
             kind: edgeforge_core::ControlEventKind::PeerHeartbeat {
-                peer: NodeId(Ulid::new()),
-                rtt_ms: 5,
-                thermal_celsius: 40.0,
-                experts_resident: 3,
+                peer: NodeId(Ulid::new()), rtt_ms: 5, thermal_celsius: 40.0, experts_resident: 3,
             },
         };
         assert!(ingest.try_enqueue(event).is_ok());
@@ -80,28 +74,20 @@ mod tests {
     #[test]
     fn test_graph_ingest_full_queue_drops() {
         let core = Arc::new(core_::GraphCore::new());
-        let ingest =
-            ingest::GraphIngest::new(core.clone(), ingest::GraphIngestConfig { capacity: 2 });
+        let ingest = ingest::GraphIngest::new(core.clone(), ingest::GraphIngestConfig { capacity: 2 });
         for _ in 0..2 {
             let event = edgeforge_core::ControlEvent {
                 timestamp_ms: 0,
-                kind: edgeforge_core::ControlEventKind::PeerLost {
-                    peer: NodeId(Ulid::new()),
-                },
+                kind: edgeforge_core::ControlEventKind::PeerLost { peer: NodeId(Ulid::new()) },
             };
             assert!(ingest.try_enqueue(event).is_ok());
         }
         // Third should drop
         let event = edgeforge_core::ControlEvent {
             timestamp_ms: 0,
-            kind: edgeforge_core::ControlEventKind::PeerLost {
-                peer: NodeId(Ulid::new()),
-            },
+            kind: edgeforge_core::ControlEventKind::PeerLost { peer: NodeId(Ulid::new()) },
         };
-        assert!(matches!(
-            ingest.try_enqueue(event),
-            Err(GraphError::Dropped)
-        ));
+        assert!(matches!(ingest.try_enqueue(event), Err(GraphError::Dropped)));
     }
 
     // ── GraphQuery Tests ────────────────────────────────────────────

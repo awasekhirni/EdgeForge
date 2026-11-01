@@ -1,5 +1,3 @@
-// Copyright 2025 β ORI Inc. Canada. All Rights Reserved.
-// Author: Awase Khirni Syed
 //! # GET /v1/models and GET /v1/models/:id
 //!
 //! ## Purpose
@@ -22,61 +20,51 @@
 //! - **Returns:** `Result<Json<ModelsResponse>, ApiError>`
 //! - **Dependencies:** `state.models.list()`
 
-use crate::{
-    dto::{ModelInfo, ModelsResponse},
-    middleware::ApiError,
-    state::AppState,
-};
-use axum::{
-    extract::{Path, State},
-    routing::get,
-    Json, Router,
-};
+use crate::{dto::{ModelInfo, ModelsResponse}, middleware::ApiError, state::AppState};
+use axum::{extract::{Path, State}, routing::get, Json, Router};
 /// Returns the axum Router for this module's routes.
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/v1/models", get(list_models))
-        .route("/v1/models/:id", get(get_model))
-}
+pub fn routes() -> Router<AppState> { Router::new().route("/v1/models", get(list_models)).route("/v1/models/:id", get(get_model)) }
 async fn list_models(State(state): State<AppState>) -> Result<Json<ModelsResponse>, ApiError> {
     let rows = state.models.list().await?;
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let data = rows
-        .into_iter()
-        .map(|r| ModelInfo {
-            id: r.id,
-            object: "model",
-            created,
-            owned_by: r.publisher,
-        })
-        .collect();
-    Ok(Json(ModelsResponse {
-        object: "list",
-        data,
-    }))
+    let created = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let data = rows.into_iter().map(|r| ModelInfo { id: r.id, object: "model", created, owned_by: r.publisher }).collect();
+    Ok(Json(ModelsResponse { object: "list", data }))
 }
-async fn get_model(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<ModelInfo>, ApiError> {
-    let mid = edgeforge_core::ModelId::parse(&id)
-        .map_err(|e| edgeforge_core::EdgeForgeError::InvalidRequest(e.to_string()))?;
-    let row = state
-        .models
-        .get(mid)
-        .await?
-        .ok_or_else(|| edgeforge_core::EdgeForgeError::ModelNotFound(id.clone()))?;
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    Ok(Json(ModelInfo {
-        id: row.id,
-        object: "model",
-        created,
-        owned_by: row.publisher,
-    }))
+async fn get_model(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<ModelInfo>, ApiError> {
+    let mid = edgeforge_core::ModelId::parse(&id).map_err(|e| edgeforge_core::EdgeForgeError::InvalidRequest(e.to_string()))?;
+    let row = state.models.get(mid).await?.ok_or_else(|| edgeforge_core::EdgeForgeError::ModelNotFound(id.clone()))?;
+    let created = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    Ok(Json(ModelInfo { id: row.id, object: "model", created, owned_by: row.publisher }))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dto::{ModelInfo, ModelsResponse};
+
+    #[test]
+    fn test_models_response_serializes() {
+        let resp = ModelsResponse {
+            object: "list",
+            data: vec![ModelInfo { id: "01J9".into(), object: "model", created: 0, owned_by: "test".into() }],
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"list\""));
+        assert!(json.contains("01J9"));
+        assert!(json.contains("model"));
+    }
+
+    #[test]
+    fn test_empty_models_response() {
+        let resp = ModelsResponse { object: "list", data: vec![] };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"data\":[]"));
+    }
+
+    #[test]
+    fn test_model_info_serializes() {
+        let info = ModelInfo { id: "01J9TEST".into(), object: "model", created: 1700000000, owned_by: "test-pub".into() };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("01J9TEST"));
+        assert!(json.contains("test-pub"));
+    }
 }
