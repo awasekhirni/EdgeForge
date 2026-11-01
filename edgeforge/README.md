@@ -13,5 +13,5 @@ cargo build --release --bin edgeforge
 
 ## Architecture
 
-11-layer architecture with 18 crates, 32 ADRs, 16 SQL migrations.
+11-layer architecture with 19 crates, 32 ADRs, 16 SQL migrations.
 See `docs/` for details.
